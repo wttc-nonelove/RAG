@@ -30,7 +30,8 @@ async def rag_pipeline(db: AsyncSession, conversation_id: int, question: str, mo
 
     history = await message_dao.get_recent_history(db, conversation_id, history_rounds)
 
-    question_embedding = await embedding_client.encode_from_db(db, question)
+    embed_result = await embedding_client.encode_from_db(db, question)
+    question_embedding = embed_result["embeddings"][0]
     results = chroma_repo.query(question_embedding, top_k)
 
     sources = []

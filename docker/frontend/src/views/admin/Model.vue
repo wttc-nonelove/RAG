@@ -2,6 +2,61 @@
   <div>
     <h2>模型管理</h2>
     <el-tabs v-model="activeTab" style="margin-top:20px" @tab-change="handleTabChange">
+      <!-- 用量查询 -->
+      <el-tab-pane label="用量查询" name="usage">
+        <el-row :gutter="20">
+          <el-col :span="6">
+            <el-card shadow="hover" body-style="text-align:center;padding:20px">
+              <div style="font-size:13px;color:#909399">总消耗 Tokens</div>
+              <div style="font-size:28px;font-weight:bold;color:#409eff;margin-top:8px">{{ usageStats.total_tokens.toLocaleString() }}</div>
+            </el-card>
+          </el-col>
+          <el-col :span="6">
+            <el-card shadow="hover" body-style="text-align:center;padding:20px">
+              <div style="font-size:13px;color:#909399">对话消耗</div>
+              <div style="font-size:28px;font-weight:bold;color:#67c23a;margin-top:8px">{{ usageStats.chat_tokens.toLocaleString() }}</div>
+            </el-card>
+          </el-col>
+          <el-col :span="6">
+            <el-card shadow="hover" body-style="text-align:center;padding:20px">
+              <div style="font-size:13px;color:#909399">Embedding 消耗</div>
+              <div style="font-size:28px;font-weight:bold;color:#e6a23c;margin-top:8px">{{ usageStats.embedding_tokens.toLocaleString() }}</div>
+            </el-card>
+          </el-col>
+          <el-col :span="6">
+            <el-card shadow="hover" body-style="text-align:center;padding:20px">
+              <div style="font-size:13px;color:#909399">总回答次数</div>
+              <div style="font-size:28px;font-weight:bold;color:#909399;margin-top:8px">{{ usageStats.total_messages.toLocaleString() }}</div>
+            </el-card>
+          </el-col>
+        </el-row>
+        <el-card style="margin-top:20px">
+          <template #header>
+            <span style="font-weight:bold">对话模型用量明细</span>
+          </template>
+          <el-table :data="usageStats.by_model" stripe>
+            <el-table-column prop="model_name" label="模型名称" min-width="200" />
+            <el-table-column prop="total_tokens" label="消耗 Tokens" width="150">
+              <template #default="{ row }">
+                <span style="font-weight:bold;color:#409eff">{{ row.total_tokens.toLocaleString() }}</span>
+              </template>
+            </el-table-column>
+            <el-table-column prop="message_count" label="回答次数" width="120" />
+            <el-table-column label="平均消耗" width="150">
+              <template #default="{ row }">
+                {{ row.message_count > 0 ? Math.round(row.total_tokens / row.message_count).toLocaleString() : 0 }}
+              </template>
+            </el-table-column>
+            <el-table-column label="占比" width="150">
+              <template #default="{ row }">
+                <el-progress :percentage="usageStats.chat_tokens > 0 ? Math.round(row.total_tokens / usageStats.chat_tokens * 100) : 0" :stroke-width="10" />
+              </template>
+            </el-table-column>
+          </el-table>
+          <div v-if="usageStats.by_model.length === 0" style="text-align:center;color:#c0c4cc;padding:40px">暂无用量数据</div>
+        </el-card>
+      </el-tab-pane>
+
       <!-- 供应商管理 -->
       <el-tab-pane label="模型供应商" name="providers">
         <el-card>
@@ -172,7 +227,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import {
   getProviders, createProvider, updateProvider, deleteProvider, testProvider,
@@ -180,10 +235,19 @@ import {
 } from '../../api/models'
 import client from '../../api/client'
 
-const activeTab = ref('providers')
+const activeTab = ref('usage')
 const providers = ref([])
 const chatModels = ref([])
 const embeddingModels = ref([])
+
+// 用量统计
+const usageStats = reactive({
+  total_tokens: 0,
+  chat_tokens: 0,
+  embedding_tokens: 0,
+  total_messages: 0,
+  by_model: [],
+})
 
 // 供应商弹窗
 const showProviderDialog = ref(false)
@@ -202,7 +266,9 @@ const configForm = reactive({
   is_default: false,
 })
 
-onMounted(() => loadProviders())
+onMounted(() => {
+  loadUsage()
+})
 
 function getProviderName(id) {
   return providers.value.find(p => p.id === id)?.provider_name || '-'
@@ -225,8 +291,21 @@ async function loadConfigs(type) {
   } catch { return [] }
 }
 
+async function loadUsage() {
+  try {
+    const res = await client.get('/models/usage')
+    const data = res.data || {}
+    usageStats.total_tokens = data.total_tokens || 0
+    usageStats.chat_tokens = data.chat_tokens || 0
+    usageStats.embedding_tokens = data.embedding_tokens || 0
+    usageStats.total_messages = data.total_messages || 0
+    usageStats.by_model = data.by_model || []
+  } catch {}
+}
+
 async function handleTabChange(tab) {
-  if (tab === 'providers') loadProviders()
+  if (tab === 'usage') await loadUsage()
+  else if (tab === 'providers') loadProviders()
   else if (tab === 'chat') chatModels.value = await loadConfigs('chat')
   else if (tab === 'embedding') embeddingModels.value = await loadConfigs('embedding')
   else if (tab === 'prompts') chatModels.value = await loadConfigs('chat')

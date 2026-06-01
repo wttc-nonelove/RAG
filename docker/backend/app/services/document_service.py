@@ -75,10 +75,18 @@ async def parse_document(doc_id: int) -> None:
             text = clean_text(text)
             chunks = chunk_text(text)
 
-            embeddings = await embedding_client.encode_batch_from_db(db, chunks)
+            embed_result = await embedding_client.encode_batch_from_db(db, chunks)
+            embeddings = embed_result["embeddings"]
+            embedding_tokens = embed_result["tokens_used"]
             ids = [f"doc{doc_id}_chunk{i}" for i in range(len(chunks))]
             metadatas = [{"doc_id": doc_id, "filename": doc.filename, "chunk_index": i} for i in range(len(chunks))]
             chroma_repo.add_batch(ids=ids, embeddings=embeddings, documents=chunks, metadatas=metadatas)
+
+            # 记录 embedding token 消耗
+            if embedding_tokens > 0:
+                from sqlalchemy import update
+                await db.execute(update(Document).where(Document.id == doc_id).values(embedding_tokens=embedding_tokens))
+                await db.commit()
 
             try:
                 # 从数据库读取提取参数配置

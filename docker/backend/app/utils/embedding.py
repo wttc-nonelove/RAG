@@ -46,8 +46,8 @@ class EmbeddingClient:
         """Local hash-based batch encoding (fallback)."""
         return [self._text_to_vector(t) for t in texts]
 
-    async def encode_with_provider(self, api_base_url: str, api_key: str, model: str, text: str) -> list[float]:
-        """Call remote embedding API (e.g., 通义千问, OpenAI-compatible)."""
+    async def encode_with_provider(self, api_base_url: str, api_key: str, model: str, text: str) -> dict:
+        """Call remote embedding API. Returns {embeddings: [...], tokens_used: int}."""
         import httpx
         base = api_base_url.rstrip("/")
         if not base.endswith("/v1"):
@@ -60,10 +60,11 @@ class EmbeddingClient:
             )
             resp.raise_for_status()
             data = resp.json()
-            return data["data"][0]["embedding"]
+            tokens_used = data.get("usage", {}).get("total_tokens", 0)
+            return {"embeddings": [data["data"][0]["embedding"]], "tokens_used": tokens_used}
 
-    async def encode_batch_with_provider(self, api_base_url: str, api_key: str, model: str, texts: list[str]) -> list[list[float]]:
-        """Call remote embedding API in batch."""
+    async def encode_batch_with_provider(self, api_base_url: str, api_key: str, model: str, texts: list[str]) -> dict:
+        """Call remote embedding API in batch. Returns {embeddings: [...], tokens_used: int}."""
         import httpx
         base = api_base_url.rstrip("/")
         if not base.endswith("/v1"):
@@ -77,39 +78,42 @@ class EmbeddingClient:
             resp.raise_for_status()
             data = resp.json()
             sorted_items = sorted(data["data"], key=lambda x: x["index"])
-            return [item["embedding"] for item in sorted_items]
+            tokens_used = data.get("usage", {}).get("total_tokens", 0)
+            return {"embeddings": [item["embedding"] for item in sorted_items], "tokens_used": tokens_used}
 
-    async def encode_from_db(self, db, text: str) -> list[float]:
-        """Resolve default embedding config from DB, call API or fall back to local."""
+    async def encode_from_db(self, db, text: str) -> dict:
+        """Resolve default embedding config from DB, call API or fall back to local.
+        Returns {embeddings: [...], tokens_used: int}"""
         from app.dao import model_dao
         from app.utils.encryption import decrypt
         config = await model_dao.get_default_config(db, "embedding")
         if not config:
-            return self._text_to_vector(text)
+            return {"embeddings": [self._text_to_vector(text)], "tokens_used": 0}
         provider = await model_dao.get_provider_by_id(db, config.provider_id)
         if not provider:
-            return self._text_to_vector(text)
+            return {"embeddings": [self._text_to_vector(text)], "tokens_used": 0}
         try:
             api_key = decrypt(provider.api_key_encrypted)
             return await self.encode_with_provider(provider.api_base_url, api_key, config.model_name, text)
         except Exception:
-            return self._text_to_vector(text)
+            return {"embeddings": [self._text_to_vector(text)], "tokens_used": 0}
 
-    async def encode_batch_from_db(self, db, texts: list[str]) -> list[list[float]]:
-        """Resolve default embedding config from DB, call API batch or fall back to local."""
+    async def encode_batch_from_db(self, db, texts: list[str]) -> dict:
+        """Resolve default embedding config from DB, call API batch or fall back to local.
+        Returns {embeddings: [...], tokens_used: int}"""
         from app.dao import model_dao
         from app.utils.encryption import decrypt
         config = await model_dao.get_default_config(db, "embedding")
         if not config:
-            return [self._text_to_vector(t) for t in texts]
+            return {"embeddings": [self._text_to_vector(t) for t in texts], "tokens_used": 0}
         provider = await model_dao.get_provider_by_id(db, config.provider_id)
         if not provider:
-            return [self._text_to_vector(t) for t in texts]
+            return {"embeddings": [self._text_to_vector(t) for t in texts], "tokens_used": 0}
         try:
             api_key = decrypt(provider.api_key_encrypted)
             return await self.encode_batch_with_provider(provider.api_base_url, api_key, config.model_name, texts)
         except Exception:
-            return [self._text_to_vector(t) for t in texts]
+            return {"embeddings": [self._text_to_vector(t) for t in texts], "tokens_used": 0}
 
 
 embedding_client = EmbeddingClient()

@@ -147,6 +147,45 @@ async def rebuild_status(user: User = Depends(require_admin), db: AsyncSession =
     return ok({"status": "idle"})
 
 
+@router.get("/usage")
+async def get_model_usage(user: User = Depends(require_admin), db: AsyncSession = Depends(get_db)):
+    from sqlalchemy import select, func
+    from app.models.message import Message
+    from app.models.document import Document
+    # 按模型统计对话 token 用量
+    result = await db.execute(
+        select(
+            Message.model_name,
+            func.sum(Message.tokens_used).label("total_tokens"),
+            func.count().label("message_count"),
+        )
+        .where(Message.role == "bot", Message.model_name.isnot(None))
+        .group_by(Message.model_name)
+    )
+    rows = result.all()
+    # 对话 token 总计
+    chat_tokens = sum(r[1] or 0 for r in rows)
+    chat_messages = sum(r[2] or 0 for r in rows)
+
+    # Embedding token 统计
+    embed_result = await db.execute(
+        select(func.sum(Document.embedding_tokens))
+    )
+    embedding_tokens = embed_result.scalar() or 0
+
+    total_tokens = chat_tokens + embedding_tokens
+    return ok({
+        "total_tokens": total_tokens,
+        "chat_tokens": chat_tokens,
+        "embedding_tokens": embedding_tokens,
+        "total_messages": chat_messages,
+        "by_model": [
+            {"model_name": r[0], "total_tokens": r[1] or 0, "message_count": r[2], "type": "chat"}
+            for r in rows
+        ],
+    })
+
+
 @router.get("/presets")
 async def list_presets(user: User = Depends(require_admin), db: AsyncSession = Depends(get_db)):
     presets = await model_dao.get_presets(db, user.id, user.role)
