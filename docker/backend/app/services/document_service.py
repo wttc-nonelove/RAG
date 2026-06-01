@@ -81,7 +81,7 @@ async def parse_document(doc_id: int) -> None:
             chroma_repo.add_batch(ids=ids, embeddings=embeddings, documents=chunks, metadatas=metadatas)
 
             try:
-                kg_data = await kg_extract(text[:3000], doc_id, doc.filename)
+                kg_data = await kg_extract(text[:3000], doc_id, doc.filename, db=db)
                 for entity in kg_data.get("entities", []):
                     neo4j_repo.create_entity(entity["name"], entity.get("type", "概念"), entity.get("description", ""), doc_id)
                 for rel in kg_data.get("relations", []):
@@ -95,6 +95,29 @@ async def parse_document(doc_id: int) -> None:
             await document_dao.update_status(db, doc_id, "failed", str(e))
 
         await db.commit()
+
+
+async def extract_kg_for_doc(doc_id: int) -> None:
+    """手动触发指定文档的知识图谱抽取"""
+    from app.database import async_session
+    async with async_session() as db:
+        doc = await document_dao.get_by_id(db, doc_id)
+        if not doc:
+            return
+        try:
+            text = _extract_text(doc.file_path, doc.file_type)
+            text = clean_text(text)
+            # 先删除旧的实体关系
+            neo4j_repo.delete_by_doc_id(doc_id)
+            # 重新抽取
+            kg_data = await kg_extract(text[:3000], doc_id, doc.filename, db=db)
+            for entity in kg_data.get("entities", []):
+                neo4j_repo.create_entity(entity["name"], entity.get("type", "概念"), entity.get("description", ""), doc_id)
+            for rel in kg_data.get("relations", []):
+                neo4j_repo.create_relation(rel["source"], rel["relation"], rel["target"])
+        except Exception as e:
+            import loguru
+            loguru.logger.error(f"KG re-extraction failed: {e}")
 
 
 def _extract_text(filepath: str, file_type: str) -> str:

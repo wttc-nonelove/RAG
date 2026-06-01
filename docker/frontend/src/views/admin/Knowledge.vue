@@ -55,7 +55,14 @@
               <el-option label="failed" value="failed" />
             </el-select>
           </div>
-          <el-button type="primary" @click="showUpload = true">上传文档</el-button>
+          <div style="display:flex;gap:12px">
+            <el-button type="primary" @click="showUpload = true">上传文档</el-button>
+            <el-popconfirm title="确定重新解析所有文档？这将花费较长时间。" @confirm="handleReparseAll">
+              <template #reference>
+                <el-button type="warning" :loading="reparseAllLoading">一键重新解析</el-button>
+              </template>
+            </el-popconfirm>
+          </div>
         </div>
       </template>
       <el-table :data="documents" stripe v-loading="loading">
@@ -147,7 +154,7 @@
 import { ref, reactive, onMounted, markRaw } from 'vue'
 import { ElMessage } from 'element-plus'
 import { UploadFilled, Document, Notebook, Grid, Memo, Files } from '@element-plus/icons-vue'
-import { getDocuments, getDocumentStats, uploadDocument, updateDocument, deleteDocument, reparseDocument, previewDocument } from '../../api/documents'
+import { getDocuments, getDocumentStats, uploadDocument, updateDocument, deleteDocument, reparseDocument, reparseAllDocuments, previewDocument } from '../../api/documents'
 
 const fileTypeList = [
   { key: 'PDF', label: 'PDF', color: '#e74c3c', icon: markRaw(Document) },
@@ -196,6 +203,7 @@ const showPreview = ref(false)
 const previewData = ref(null)
 const previewPage = ref(1)
 const previewDocId = ref(null)
+const reparseAllLoading = ref(false)
 
 onMounted(() => {
   loadDocs()
@@ -278,6 +286,20 @@ async function handleReparse(row) {
   await reparseDocument(row.id)
   ElMessage.success('重新解析已触发')
   loadDocs()
+}
+
+async function handleReparseAll() {
+  reparseAllLoading.value = true
+  try {
+    const res = await reparseAllDocuments()
+    ElMessage.success(res.data.message || '重新解析已触发')
+    loadDocs()
+    loadStats()
+  } catch {
+    ElMessage.error('操作失败')
+  } finally {
+    reparseAllLoading.value = false
+  }
 }
 
 async function handlePreview(row) {

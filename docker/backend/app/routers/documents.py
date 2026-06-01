@@ -107,3 +107,13 @@ async def reparse_document(doc_id: int, background_tasks: BackgroundTasks, user:
         raise HTTPException(status_code=404, detail="文档不存在")
     background_tasks.add_task(document_service.parse_document, doc_id)
     return ok(message="重新解析已触发")
+
+
+@router.post("/reparse-all")
+async def reparse_all_documents(background_tasks: BackgroundTasks, user: User = Depends(require_admin), db: AsyncSession = Depends(get_db)):
+    docs = await document_dao.get_all_ids(db)
+    if not docs:
+        return ok({"count": 0}, "没有需要重新解析的文档")
+    for doc_id in docs:
+        background_tasks.add_task(document_service.parse_document, doc_id)
+    return ok({"count": len(docs)}, f"已触发 {len(docs)} 个文档的重新解析")

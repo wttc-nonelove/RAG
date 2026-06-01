@@ -130,6 +130,64 @@ def filter_by_type(entity_type: str, limit: int = 200) -> dict:
         return {"nodes": list(nodes.values()), "edges": edges}
 
 
+def get_all_relations(limit: int = 200) -> list:
+    driver = get_driver()
+    with driver.session() as session:
+        result = session.run("""
+        MATCH (e:Entity)-[r]->(t:Entity)
+        RETURN e.name AS source, type(r) AS rel, t.name AS target
+        LIMIT $limit
+        """, limit=limit)
+        relations = []
+        for record in result:
+            relations.append({
+                "source": record["source"],
+                "rel": record["rel"],
+                "target": record["target"],
+            })
+        return relations
+
+
+def update_entity(name: str, entity_type: str, description: str = "") -> None:
+    driver = get_driver()
+    with driver.session() as session:
+        session.run("""
+        MATCH (e:Entity {name: $name})
+        SET e.type = $type, e.description = $description
+        """, name=name, type=entity_type, description=description)
+
+
+def delete_relation(source: str, relation: str, target: str) -> None:
+    driver = get_driver()
+    with driver.session() as session:
+        session.run(f"""
+        MATCH (a:Entity {{name: $source}})-[r:`{relation}`]->(b:Entity {{name: $target}})
+        DELETE r
+        """, source=source, target=target)
+
+
+def get_entity_neighbors(entity_name: str, limit: int = 50) -> dict:
+    driver = get_driver()
+    with driver.session() as session:
+        result = session.run("""
+        MATCH (e:Entity)-[r]-(t:Entity)
+        WHERE e.name = $name
+        RETURN t.name AS name, t.type AS type, t.description AS description,
+               type(r) AS rel, startNode(r).name AS from_node
+        LIMIT $limit
+        """, name=entity_name, limit=limit)
+        neighbors = []
+        for record in result:
+            neighbors.append({
+                "name": record["name"],
+                "type": record["type"] or "概念",
+                "description": record["description"] or "",
+                "rel": record["rel"],
+                "direction": "out" if record["from_node"] == entity_name else "in",
+            })
+        return neighbors
+
+
 def health() -> bool:
     try:
         driver = get_driver()

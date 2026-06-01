@@ -14,10 +14,36 @@ EXTRACT_PROMPT = """请从以下文本中提取实体和关系，返回 JSON 格
 只返回 JSON，不要其他内容。"""
 
 
-async def extract(text: str, doc_id: int, doc_name: str) -> dict:
+async def extract(text: str, doc_id: int, doc_name: str, db=None, model_name: str = None) -> dict:
     try:
-        prompt = EXTRACT_PROMPT.format(text=text[:1500])
-        result = await llm_client.chat("deepseek-chat", [{"role": "user", "content": prompt}], temperature=0.1, max_tokens=2048)
+        prompt = EXTRACT_PROMPT.format(text=text[:3000])
+        messages = [{"role": "user", "content": prompt}]
+
+        if db:
+            # 从 system_config 读取 kg_model 配置
+            if not model_name:
+                from app.dao import config_dao
+                config = await config_dao.get_all(db)
+                kg_model = None
+                for c in config:
+                    if c.config_key == "kg_model":
+                        kg_model = c.config_value
+                        break
+                model_name = kg_model if kg_model else None
+
+            if model_name:
+                result = await llm_client.chat_from_db(db, model_name, messages, temperature=0.1, max_tokens=2048)
+            else:
+                # 回退到默认 chat 模型
+                from app.dao import model_dao
+                default_config = await model_dao.get_default_config(db, "chat")
+                if default_config:
+                    result = await llm_client.chat_from_db(db, default_config.model_name, messages, temperature=0.1, max_tokens=2048)
+                else:
+                    result = await llm_client.chat("deepseek-chat", messages, temperature=0.1, max_tokens=2048)
+        else:
+            result = await llm_client.chat("deepseek-chat", messages, temperature=0.1, max_tokens=2048)
+
         content = result["content"]
         json_match = re.search(r"\{[\s\S]*\}", content)
         if json_match:

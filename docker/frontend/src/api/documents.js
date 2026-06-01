@@ -8,3 +8,4 @@ export const previewDocument = (id, params) => client.get(`/documents/${id}/prev
 export const updateDocument = (id, formData) => client.post(`/documents/${id}/update`, formData, { headers: { 'Content-Type': 'multipart/form-data' } })
 export const deleteDocument = (id) => client.delete(`/documents/${id}`)
 export const reparseDocument = (id) => client.post(`/documents/${id}/reparse`)
+export const reparseAllDocuments = () => client.post('/documents/reparse-all')

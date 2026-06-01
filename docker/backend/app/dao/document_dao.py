@@ -55,3 +55,8 @@ async def delete_doc(db: AsyncSession, doc_id: int) -> None:
     doc = await get_by_id(db, doc_id)
     if doc:
         await db.delete(doc)
+
+
+async def get_all_ids(db: AsyncSession) -> List[int]:
+    result = await db.execute(select(Document.id))
+    return [row[0] for row in result.all()]
