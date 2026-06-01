@@ -1,0 +1,145 @@
+version: "3.8"
+
+services:
+  rag-mysql:
+    image: mysql:8.0
+    container_name: rag-mysql
+    restart: unless-stopped
+    ports:
+      - "3307:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rag_root_2026}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-rag_db}
+      MYSQL_USER: ${MYSQL_USER:-rag_user}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-rag_pass_2026}
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./mysql/init.sql:/docker-entrypoint-initdb.d/init.sql
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci --default-authentication-plugin=mysql_native_password
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD:-rag_root_2026}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - rag-network
+
+  rag-redis:
+    image: redis:7-alpine
+    container_name: rag-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    command: redis-server --requirepass ${REDIS_PASSWORD:-rag_redis_2026}
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-rag_redis_2026}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - rag-network
+
+  rag-neo4j:
+    image: neo4j:4.4.16
+    container_name: rag-neo4j
+    restart: unless-stopped
+    ports:
+      - "7687:7687"
+      - "7474:7474"
+    environment:
+      NEO4J_AUTH: ${NEO4J_AUTH:-neo4j/rag_neo4j_2026}
+      NEO4J_PLUGINS: '["apoc"]'
+    volumes:
+      - neo4j_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "cypher-shell -u neo4j -p ${NEO4J_PASSWORD:-rag_neo4j_2026} 'RETURN 1'"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+    networks:
+      - rag-network
+
+  rag-chromadb:
+    image: chromadb/chroma:latest
+    container_name: rag-chromadb
+    restart: unless-stopped
+    ports:
+      - "8001:8000"
+    environment:
+      ANONYMIZED_TELEMETRY: "False"
+      CHROMA_SERVER_AUTHN_PROVIDER: ""
+    volumes:
+      - chroma_data:/chroma/chroma
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/heartbeat"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - rag-network
+
+  rag-backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: rag-backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - MYSQL_HOST=rag-mysql
+      - MYSQL_PORT=3306
+      - MYSQL_USER=${MYSQL_USER:-rag_user}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD:-rag_pass_2026}
+      - MYSQL_DATABASE=${MYSQL_DATABASE:-rag_db}
+      - REDIS_HOST=rag-redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-rag_redis_2026}
+      - NEO4J_URI=bolt://rag-neo4j:7687
+      - NEO4J_USER=neo4j
+      - NEO4J_PASSWORD=${NEO4J_PASSWORD:-rag_neo4j_2026}
+      - CHROMA_HOST=rag-chromadb
+      - CHROMA_PORT=8000
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-rag_jwt_secret_2026_change_in_prod}
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY:-0123456789abcdef0123456789abcdef}
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-sk-placeholder}
+      - DEEPSEEK_BASE_URL=${DEEPSEEK_BASE_URL:-https://api.deepseek.com/v1}
+    volumes:
+      - file_store:/app/data/files
+    depends_on:
+      rag-mysql:
+        condition: service_healthy
+      rag-redis:
+        condition: service_healthy
+      rag-neo4j:
+        condition: service_started
+      rag-chromadb:
+        condition: service_started
+    networks:
+      - rag-network
+
+  rag-frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: rag-frontend
+    restart: unless-stopped
+    ports:
+      - "5173:5173"
+    depends_on:
+      - rag-backend
+    networks:
+      - rag-network
+
+volumes:
+  mysql_data:
+  redis_data:
+  neo4j_data:
+  chroma_data:
+  file_store:
+
+networks:
+  rag-network:
+    driver: bridge

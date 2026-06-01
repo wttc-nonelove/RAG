@@ -1,0 +1,17 @@
+import client from './client'
+
+export const getProviders = () => client.get('/models/providers')
+export const createProvider = (data) => client.post('/models/providers', data)
+export const updateProvider = (id, data) => client.put(`/models/providers/${id}`, data)
+export const deleteProvider = (id) => client.delete(`/models/providers/${id}`)
+export const testProvider = (id) => client.post(`/models/providers/${id}/test`)
+export const getModelConfigs = (params) => client.get('/models/configs', { params })
+export const createModelConfig = (data) => client.post('/models/configs', data)
+export const setDefaultModel = (id) => client.put(`/models/configs/${id}/set-default`)
+export const savePrompt = (id, data) => client.put(`/models/prompts/${id}`, data)
+export const rebuildVectors = (data) => client.post('/models/rebuild-vectors', data)
+export const getRebuildStatus = () => client.get('/models/rebuild-status')
+export const getPresets = () => client.get('/models/presets')
+export const createPreset = (data) => client.post('/models/presets', data)
+export const updatePreset = (id, data) => client.put(`/models/presets/${id}`, data)
+export const deletePreset = (id) => client.delete(`/models/presets/${id}`)

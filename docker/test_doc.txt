@@ -1,0 +1,1 @@
+RAG是检索增强生成的缩写，全称为Retrieval-Augmented Generation。它结合了信息检索和文本生成技术，是当前AI领域的热门方向。DeepSeek是一个强大的大语言模型，由中国团队开发。知识图谱是一种结构化的知识表示方式。
