@@ -67,6 +67,11 @@
                 <el-button type="danger" :loading="deleteAllLoading">一键删除</el-button>
               </template>
             </el-popconfirm>
+            <el-popconfirm title="确定清理知识图谱中没有对应文档的孤立实体？" @confirm="handleCleanupOrphans">
+              <template #reference>
+                <el-button :loading="cleanupLoading">清理孤立实体</el-button>
+              </template>
+            </el-popconfirm>
           </div>
         </div>
       </template>
@@ -174,7 +179,7 @@
 import { ref, reactive, onMounted, markRaw } from 'vue'
 import { ElMessage } from 'element-plus'
 import { UploadFilled, Document, Notebook, Grid, Memo, Files } from '@element-plus/icons-vue'
-import { getDocuments, getDocumentStats, uploadDocument, updateDocument, deleteDocument, reparseDocument, reparseAllDocuments, deleteAllDocuments, batchDeleteDocuments, batchReparseDocuments, previewDocument } from '../../api/documents'
+import { getDocuments, getDocumentStats, uploadDocument, updateDocument, deleteDocument, reparseDocument, reparseAllDocuments, deleteAllDocuments, batchDeleteDocuments, batchReparseDocuments, cleanupOrphanEntities, previewDocument } from '../../api/documents'
 
 const fileTypeList = [
   { key: 'PDF', label: 'PDF', color: '#e74c3c', icon: markRaw(Document) },
@@ -232,6 +237,7 @@ const previewPage = ref(1)
 const previewDocId = ref(null)
 const reparseAllLoading = ref(false)
 const deleteAllLoading = ref(false)
+const cleanupLoading = ref(false)
 const selectedDocs = ref([])
 
 onMounted(() => {
@@ -285,9 +291,26 @@ async function handleUpload() {
     }
   }
   uploading.value = false
-  ElMessage.success(`上传完成：${successCount}/${uploadQueue.value.length} 成功`)
+  ElMessage.success(`上传完成：${successCount}/${uploadQueue.value.length} 成功，正在后台解析...`)
   loadDocs()
   loadStats()
+  // 自动刷新页面，直到所有文档解析完成
+  startAutoRefresh()
+}
+
+let refreshTimer = null
+function startAutoRefresh() {
+  if (refreshTimer) clearInterval(refreshTimer)
+  refreshTimer = setInterval(async () => {
+    await loadDocs()
+    await loadStats()
+    // 检查是否还有待解析的文档
+    const pendingCount = documents.value.filter(d => d.parse_status === 'pending' || d.parse_status === 'parsing').length
+    if (pendingCount === 0) {
+      clearInterval(refreshTimer)
+      refreshTimer = null
+    }
+  }, 3000) // 每3秒刷新一次
 }
 
 async function handleUpdate(docId, file) {
@@ -342,6 +365,20 @@ async function handleDeleteAll() {
     ElMessage.error('操作失败')
   } finally {
     deleteAllLoading.value = false
+  }
+}
+
+async function handleCleanupOrphans() {
+  cleanupLoading.value = true
+  try {
+    const res = await cleanupOrphanEntities()
+    ElMessage.success(res.message || '清理完成')
+    loadDocs()
+    loadStats()
+  } catch {
+    ElMessage.error('操作失败')
+  } finally {
+    cleanupLoading.value = false
   }
 }
 

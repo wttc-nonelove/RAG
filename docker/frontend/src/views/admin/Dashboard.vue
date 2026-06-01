@@ -247,8 +247,8 @@ async function loadStorage() {
 let resizeHandler = null
 
 onMounted(async () => {
-  await loadStats()
   await nextTick()
+  // 先初始化图表
   if (trendChartRef.value) {
     trendChart = echarts.init(trendChartRef.value)
   }
@@ -260,6 +260,8 @@ onMounted(async () => {
     docTypeChart?.resize()
   }
   window.addEventListener('resize', resizeHandler)
+  // 再加载数据
+  await loadStats()
   await loadTrends()
   await loadSystemStatus()
   await loadStorage()

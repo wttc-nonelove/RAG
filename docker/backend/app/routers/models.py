@@ -147,6 +147,13 @@ async def rebuild_status(user: User = Depends(require_admin), db: AsyncSession =
     return ok({"status": "idle"})
 
 
+@router.get("/usage")
+async def get_model_usage(user: User = Depends(require_admin), db: AsyncSession = Depends(get_db)):
+    from app.dao import token_usage_dao
+    summary = await token_usage_dao.get_usage_summary(db)
+    return ok(summary)
+
+
 @router.get("/presets")
 async def list_presets(user: User = Depends(require_admin), db: AsyncSession = Depends(get_db)):
     presets = await model_dao.get_presets(db, user.id, user.role)

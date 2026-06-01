@@ -160,3 +160,10 @@ async def batch_reparse_documents(req: BatchRequest, background_tasks: Backgroun
     for doc_id in req.ids:
         background_tasks.add_task(document_service.parse_document, doc_id)
     return ok({"count": len(req.ids)}, f"已触发 {len(req.ids)} 个文档的重新解析")
+
+
+@router.post("/cleanup-orphans")
+async def cleanup_orphan_entities(user: User = Depends(require_admin), db: AsyncSession = Depends(get_db)):
+    """清理知识图谱中没有对应文档的孤立实体"""
+    deleted = await document_service.cleanup_orphan_entities(db)
+    return ok({"deleted": deleted}, f"已清理 {deleted} 个孤立实体")

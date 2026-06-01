@@ -16,5 +16,6 @@ class Document(Base):
     version = Column(Integer, nullable=False, default=1)
     uploaded_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"))
     error_message = Column(Text)
+    embedding_tokens = Column(Integer, default=0)
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, onupdate=func.now())
