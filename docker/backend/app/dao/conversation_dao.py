@@ -28,3 +28,10 @@ async def delete_conv(db: AsyncSession, conv_id: int) -> None:
     conv = await get_by_id(db, conv_id)
     if conv:
         await db.delete(conv)
+
+
+async def update_title(db: AsyncSession, conv_id: int, title: str) -> None:
+    conv = await get_by_id(db, conv_id)
+    if conv:
+        conv.title = title
+        await db.flush()

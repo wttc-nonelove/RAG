@@ -1,15 +1,52 @@
 <template>
   <div>
     <h2>知识库管理</h2>
+
+    <!-- 统计卡片 -->
+    <el-row :gutter="16" style="margin-top:20px">
+      <el-col :span="4">
+        <el-card shadow="hover" body-style="padding:16px;text-align:center">
+          <div style="font-size:12px;color:#909399">总文件数</div>
+          <div style="font-size:28px;font-weight:bold;color:#303133;margin-top:4px">{{ docStats.total }}</div>
+        </el-card>
+      </el-col>
+      <el-col :span="4" v-for="ft in fileTypeList" :key="ft.key">
+        <el-card shadow="hover" body-style="padding:16px;text-align:center">
+          <div style="font-size:12px;color:#909399">{{ ft.label }}</div>
+          <div style="font-size:22px;font-weight:bold;margin-top:4px;display:flex;align-items:center;justify-content:center;gap:6px">
+            <el-icon :color="ft.color" :size="20"><component :is="ft.icon" /></el-icon>
+            <span :style="{color:ft.color}">{{ docStats.type_counts[ft.key] || 0 }}</span>
+          </div>
+        </el-card>
+      </el-col>
+      <el-col :span="2">
+        <el-card shadow="hover" body-style="padding:16px;text-align:center">
+          <div style="font-size:12px;color:#909399">成功</div>
+          <div style="font-size:22px;font-weight:bold;color:#67c23a;margin-top:4px">{{ docStats.status_counts['completed'] || 0 }}</div>
+        </el-card>
+      </el-col>
+      <el-col :span="2">
+        <el-card shadow="hover" body-style="padding:16px;text-align:center">
+          <div style="font-size:12px;color:#909399">待解析</div>
+          <div style="font-size:22px;font-weight:bold;color:#e6a23c;margin-top:4px">{{ (docStats.status_counts['pending'] || 0) + (docStats.status_counts['parsing'] || 0) }}</div>
+        </el-card>
+      </el-col>
+      <el-col :span="2">
+        <el-card shadow="hover" body-style="padding:16px;text-align:center">
+          <div style="font-size:12px;color:#909399">失败</div>
+          <div style="font-size:22px;font-weight:bold;color:#f56c6c;margin-top:4px">{{ docStats.status_counts['failed'] || 0 }}</div>
+        </el-card>
+      </el-col>
+    </el-row>
+
+    <!-- 文档列表 -->
     <el-card style="margin-top:20px">
       <template #header>
         <div style="display:flex;justify-content:space-between;align-items:center">
           <div style="display:flex;gap:12px">
             <el-input v-model="keyword" placeholder="搜索文档" style="width:200px" clearable @clear="loadDocs" @keyup.enter="loadDocs" />
             <el-select v-model="filterType" placeholder="类型" clearable style="width:100px" @change="loadDocs">
-              <el-option label="PDF" value="PDF" />
-              <el-option label="DOCX" value="DOCX" />
-              <el-option label="TXT" value="TXT" />
+              <el-option v-for="ft in fileTypeList" :key="ft.key" :label="ft.key" :value="ft.key" />
             </el-select>
             <el-select v-model="filterStatus" placeholder="状态" clearable style="width:120px" @change="loadDocs">
               <el-option label="pending" value="pending" />
@@ -22,8 +59,19 @@
         </div>
       </template>
       <el-table :data="documents" stripe v-loading="loading">
-        <el-table-column prop="filename" label="文件名" min-width="200" />
-        <el-table-column prop="file_type" label="类型" width="80" />
+        <el-table-column prop="filename" label="文件名" min-width="200">
+          <template #default="{ row }">
+            <div style="display:flex;align-items:center;gap:8px">
+              <el-icon :color="getFileColor(row.file_type)" :size="18"><component :is="getFileIcon(row.file_type)" /></el-icon>
+              <span>{{ row.filename }}</span>
+            </div>
+          </template>
+        </el-table-column>
+        <el-table-column prop="file_type" label="类型" width="80">
+          <template #default="{ row }">
+            <el-tag :color="getFileColor(row.file_type)" style="color:#fff;border:none" size="small">{{ row.file_type }}</el-tag>
+          </template>
+        </el-table-column>
         <el-table-column prop="parse_status" label="状态" width="100">
           <template #default="{ row }">
             <el-tag :type="row.parse_status === 'completed' ? 'success' : row.parse_status === 'failed' ? 'danger' : 'warning'">
@@ -37,7 +85,7 @@
         <el-table-column label="操作" width="250">
           <template #default="{ row }">
             <el-button link type="primary" size="small" @click="handlePreview(row)">预览</el-button>
-            <el-upload :show-file-list="false" :before-upload="(f) => handleUpdate(row.id, f)" accept=".pdf,.docx,.txt">
+            <el-upload :show-file-list="false" :before-upload="(f) => handleUpdate(row.id, f)" :accept="acceptTypes">
               <el-button link type="primary" size="small">更新</el-button>
             </el-upload>
             <el-button link type="primary" size="small" @click="handleReparse(row)">重新解析</el-button>
@@ -55,11 +103,11 @@
     </el-card>
 
     <el-dialog v-model="showUpload" title="上传文档" width="550" @closed="resetUpload">
-      <el-upload drag action="#" :auto-upload="false" :on-change="onFileChange" :file-list="uploadFiles" multiple accept=".pdf,.docx,.txt">
+      <el-upload drag action="#" :auto-upload="false" :on-change="onFileChange" :file-list="uploadFiles" multiple :accept="acceptTypes">
         <el-icon style="font-size:40px;color:#c0c4cc"><UploadFilled /></el-icon>
         <div>拖拽文件到此处或<em>点击上传</em>（支持多选）</div>
         <template #tip>
-          <div style="color:#909399;font-size:12px">支持 PDF、DOCX、TXT 格式，可同时选择多个文件</div>
+          <div style="color:#909399;font-size:12px">支持 PDF、DOCX、TXT、MD、XLSX、CSV 格式，可同时选择多个文件</div>
         </template>
       </el-upload>
       <el-input v-model="uploadTag" placeholder="标签（可选）" style="margin-top:12px" />
@@ -96,10 +144,38 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, reactive, onMounted, markRaw } from 'vue'
 import { ElMessage } from 'element-plus'
-import { UploadFilled } from '@element-plus/icons-vue'
-import { getDocuments, uploadDocument, updateDocument, deleteDocument, reparseDocument, previewDocument } from '../../api/documents'
+import { UploadFilled, Document, Notebook, Grid, Memo, Files } from '@element-plus/icons-vue'
+import { getDocuments, getDocumentStats, uploadDocument, updateDocument, deleteDocument, reparseDocument, previewDocument } from '../../api/documents'
+
+const fileTypeList = [
+  { key: 'PDF', label: 'PDF', color: '#e74c3c', icon: markRaw(Document) },
+  { key: 'DOCX', label: 'DOCX', color: '#3498db', icon: markRaw(Document) },
+  { key: 'TXT', label: 'TXT', color: '#909399', icon: markRaw(Memo) },
+  { key: 'MD', label: 'MD', color: '#9b59b6', icon: markRaw(Notebook) },
+  { key: 'XLSX', label: 'XLSX', color: '#27ae60', icon: markRaw(Grid) },
+  { key: 'XLS', label: 'XLS', color: '#27ae60', icon: markRaw(Grid) },
+  { key: 'CSV', label: 'CSV', color: '#e67e22', icon: markRaw(Files) },
+]
+
+const acceptTypes = '.pdf,.docx,.txt,.md,.xlsx,.xls,.csv'
+
+function getFileIcon(type) {
+  const ft = fileTypeList.find(f => f.key === type)
+  return ft ? ft.icon : markRaw(Document)
+}
+
+function getFileColor(type) {
+  const ft = fileTypeList.find(f => f.key === type)
+  return ft ? ft.color : '#909399'
+}
+
+const docStats = reactive({
+  total: 0,
+  type_counts: {},
+  status_counts: {},
+})
 
 const documents = ref([])
 const loading = ref(false)
@@ -121,7 +197,17 @@ const previewData = ref(null)
 const previewPage = ref(1)
 const previewDocId = ref(null)
 
-onMounted(() => loadDocs())
+onMounted(() => {
+  loadDocs()
+  loadStats()
+})
+
+async function loadStats() {
+  try {
+    const res = await getDocumentStats()
+    Object.assign(docStats, res.data)
+  } catch {}
+}
 
 async function loadDocs() {
   loading.value = true
@@ -164,6 +250,7 @@ async function handleUpload() {
   uploading.value = false
   ElMessage.success(`上传完成：${successCount}/${uploadQueue.value.length} 成功`)
   loadDocs()
+  loadStats()
 }
 
 async function handleUpdate(docId, file) {
@@ -173,6 +260,7 @@ async function handleUpdate(docId, file) {
     await updateDocument(docId, fd)
     ElMessage.success('更新成功')
     loadDocs()
+    loadStats()
   } catch {
     ElMessage.error('更新失败')
   }
@@ -183,6 +271,7 @@ async function handleDelete(id) {
   await deleteDocument(id)
   ElMessage.success('删除成功')
   loadDocs()
+  loadStats()
 }
 
 async function handleReparse(row) {

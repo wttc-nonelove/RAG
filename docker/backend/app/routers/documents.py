@@ -15,6 +15,12 @@ def ok(data=None, message="ok"):
     return {"code": 200, "data": data, "message": message}
 
 
+@router.get("/stats")
+async def get_document_stats(user: User = Depends(require_admin), db: AsyncSession = Depends(get_db)):
+    result = await document_service.get_document_stats(db)
+    return ok(result)
+
+
 @router.get("")
 async def list_documents(
     page: int = 1, size: int = 20, keyword: str = "", file_type: str = "", status: str = "",

@@ -87,10 +87,10 @@ let resizeHandler = null
 
 const graphData = ref({ nodes: [], edges: [] })
 
-const entityTypes = ['人物', '组织', '地点', '概念', '技术', '产品', '事件']
+const entityTypes = ['人物', '组织', '地点', '概念', '技术', '产品', '事件', '制度', '指标', '流程']
 const COLORS = ['#5470c6','#91cc75','#fac858','#ee6666','#73c0de','#3ba272','#fc8452','#9a60b4','#ea7ccc','#48b8d0']
-const TYPE_MAP = { '人物':0, '组织':1, '地点':2, '概念':3, '技术':4, '产品':5, '事件':6 }
-const TYPE_COLORS = { '人物':'#5470c6','组织':'#91cc75','地点':'#fac858','概念':'#ee6666','技术':'#73c0de','产品':'#3ba272','事件':'#fc8452' }
+const TYPE_MAP = { '人物':0, '组织':1, '地点':2, '概念':3, '技术':4, '产品':5, '事件':6, '制度':7, '指标':8, '流程':9 }
+const TYPE_COLORS = { '人物':'#5470c6','组织':'#91cc75','地点':'#fac858','概念':'#ee6666','技术':'#73c0de','产品':'#3ba272','事件':'#fc8452','制度':'#9a60b4','指标':'#ea7ccc','流程':'#48b8d0' }
 
 const showEntityDialog = ref(false)
 const entityForm = reactive({ name: '', type: '概念', description: '' })

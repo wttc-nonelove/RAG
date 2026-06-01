@@ -88,7 +88,7 @@ const modelName = ref('deepseek-chat')
 const models = ref([])
 const chatArea = ref(null)
 
-const TYPE_COLORS = { '人物':'#5470c6','组织':'#91cc75','地点':'#fac858','概念':'#ee6666','技术':'#73c0de','产品':'#3ba272','事件':'#fc8452' }
+const TYPE_COLORS = { '人物':'#5470c6','组织':'#91cc75','地点':'#fac858','概念':'#ee6666','技术':'#73c0de','产品':'#3ba272','事件':'#fc8452','制度':'#9a60b4','指标':'#ea7ccc','流程':'#48b8d0' }
 
 function getEntityColor(entities, name) {
   if (!entities) return '#909399'

@@ -11,7 +11,28 @@ from app.utils.kg_extractor import extract as kg_extract
 from app.dao import neo4j_repo
 
 
-ALLOWED_TYPES = {"PDF": ".pdf", "DOCX": ".docx", "TXT": ".txt"}
+ALLOWED_TYPES = {"PDF": ".pdf", "DOCX": ".docx", "TXT": ".txt", "MD": ".md", "XLSX": ".xlsx", "XLS": ".xls", "CSV": ".csv"}
+
+
+async def get_document_stats(db: AsyncSession) -> dict:
+    from sqlalchemy import select, func
+    # 总文件数
+    total = (await db.execute(select(func.count()).select_from(Document))).scalar()
+    # 各类型文件数
+    type_result = await db.execute(
+        select(Document.file_type, func.count()).group_by(Document.file_type)
+    )
+    type_counts = {row[0]: row[1] for row in type_result.all()}
+    # 各状态文件数
+    status_result = await db.execute(
+        select(Document.parse_status, func.count()).group_by(Document.parse_status)
+    )
+    status_counts = {row[0]: row[1] for row in status_result.all()}
+    return {
+        "total": total,
+        "type_counts": type_counts,
+        "status_counts": status_counts,
+    }
 
 
 def _detect_type(filename: str) -> str:
@@ -83,9 +104,32 @@ def _extract_text(filepath: str, file_type: str) -> str:
     elif file_type == "DOCX":
         doc = DocxDocument(filepath)
         return "\n\n".join(p.text for p in doc.paragraphs if p.text.strip())
-    elif file_type == "TXT":
+    elif file_type in ("TXT", "MD"):
         with open(filepath, "r", encoding="utf-8", errors="ignore") as f:
             return f.read()
+    elif file_type in ("XLSX", "XLS"):
+        from openpyxl import load_workbook
+        wb = load_workbook(filepath, read_only=True, data_only=True)
+        lines = []
+        for sheet in wb.sheetnames:
+            ws = wb[sheet]
+            lines.append(f"【{sheet}】")
+            for row in ws.iter_rows(values_only=True):
+                row_text = "\t".join(str(cell) if cell is not None else "" for cell in row)
+                if row_text.strip():
+                    lines.append(row_text)
+        wb.close()
+        return "\n".join(lines)
+    elif file_type == "CSV":
+        import csv
+        lines = []
+        with open(filepath, "r", encoding="utf-8", errors="ignore") as f:
+            reader = csv.reader(f)
+            for row in reader:
+                row_text = "\t".join(row)
+                if row_text.strip():
+                    lines.append(row_text)
+        return "\n".join(lines)
     raise ValueError(f"不支持的文件类型: {file_type}")
 
 

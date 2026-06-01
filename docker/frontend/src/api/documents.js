@@ -1,6 +1,7 @@
 import client from './client'
 
 export const getDocuments = (params) => client.get('/documents', { params })
+export const getDocumentStats = () => client.get('/documents/stats')
 export const uploadDocument = (formData) => client.post('/documents/upload', formData, { headers: { 'Content-Type': 'multipart/form-data' } })
 export const getDocument = (id) => client.get(`/documents/${id}`)
 export const previewDocument = (id, params) => client.get(`/documents/${id}/preview`, { params })
