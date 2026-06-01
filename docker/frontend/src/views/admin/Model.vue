@@ -25,31 +25,38 @@
           </el-col>
           <el-col :span="6">
             <el-card shadow="hover" body-style="text-align:center;padding:20px">
-              <div style="font-size:13px;color:#909399">总回答次数</div>
-              <div style="font-size:28px;font-weight:bold;color:#909399;margin-top:8px">{{ usageStats.total_messages.toLocaleString() }}</div>
+              <div style="font-size:13px;color:#909399">总问答次数</div>
+              <div style="font-size:28px;font-weight:bold;color:#909399;margin-top:8px">{{ usageStats.qa_count.toLocaleString() }}</div>
             </el-card>
           </el-col>
         </el-row>
         <el-card style="margin-top:20px">
           <template #header>
-            <span style="font-weight:bold">对话模型用量明细</span>
+            <span style="font-weight:bold">各模型用量明细</span>
           </template>
           <el-table :data="usageStats.by_model" stripe>
-            <el-table-column prop="model_name" label="模型名称" min-width="200" />
+            <el-table-column prop="model_name" label="模型名称" min-width="150" />
+            <el-table-column label="类型" width="100">
+              <template #default="{ row }">
+                <el-tag :type="row.model_type === 'chat' ? 'primary' : 'success'" size="small">
+                  {{ row.model_type === 'chat' ? '对话' : 'Embedding' }}
+                </el-tag>
+              </template>
+            </el-table-column>
             <el-table-column prop="total_tokens" label="消耗 Tokens" width="150">
               <template #default="{ row }">
                 <span style="font-weight:bold;color:#409eff">{{ row.total_tokens.toLocaleString() }}</span>
               </template>
             </el-table-column>
-            <el-table-column prop="message_count" label="回答次数" width="120" />
+            <el-table-column prop="count" label="调用次数" width="120" />
             <el-table-column label="平均消耗" width="150">
               <template #default="{ row }">
-                {{ row.message_count > 0 ? Math.round(row.total_tokens / row.message_count).toLocaleString() : 0 }}
+                {{ row.count > 0 ? Math.round(row.total_tokens / row.count).toLocaleString() : 0 }}
               </template>
             </el-table-column>
             <el-table-column label="占比" width="150">
               <template #default="{ row }">
-                <el-progress :percentage="usageStats.chat_tokens > 0 ? Math.round(row.total_tokens / usageStats.chat_tokens * 100) : 0" :stroke-width="10" />
+                <el-progress :percentage="usageStats.total_tokens > 0 ? Math.round(row.total_tokens / usageStats.total_tokens * 100) : 0" :stroke-width="10" />
               </template>
             </el-table-column>
           </el-table>
@@ -245,7 +252,7 @@ const usageStats = reactive({
   total_tokens: 0,
   chat_tokens: 0,
   embedding_tokens: 0,
-  total_messages: 0,
+  qa_count: 0,
   by_model: [],
 })
 
@@ -298,7 +305,7 @@ async function loadUsage() {
     usageStats.total_tokens = data.total_tokens || 0
     usageStats.chat_tokens = data.chat_tokens || 0
     usageStats.embedding_tokens = data.embedding_tokens || 0
-    usageStats.total_messages = data.total_messages || 0
+    usageStats.qa_count = data.qa_count || 0
     usageStats.by_model = data.by_model || []
   } catch {}
 }

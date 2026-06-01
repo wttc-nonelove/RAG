@@ -144,6 +144,14 @@ async def rag_pipeline(db: AsyncSession, conversation_id: int, question: str, mo
     answer = llm_result["content"]
     tokens_used = llm_result["tokens_used"]
 
+    # 记录 token 消耗到独立表
+    from app.dao import token_usage_dao
+    await token_usage_dao.create(
+        db, model_name=model_name, model_type="chat",
+        tokens_used=tokens_used, source_type="qa",
+        source_id=conversation_id, source_name=question[:100]
+    )
+
     msg = await message_dao.create(db, conversation_id, "bot", answer, sources=sources, kg_references=kg_references, model_name=model_name, tokens_used=tokens_used)
     await db.commit()
 

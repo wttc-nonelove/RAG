@@ -103,6 +103,25 @@ def delete_by_doc_id(doc_id: int) -> None:
         session.run("MATCH (e:Entity {doc_id: $doc_id}) DETACH DELETE e", doc_id=doc_id)
 
 
+def cleanup_orphan_entities(valid_doc_ids: list) -> int:
+    """清理没有对应文档的孤立实体"""
+    driver = get_driver()
+    with driver.session() as session:
+        if not valid_doc_ids:
+            # 如果没有文档，删除所有实体
+            result = session.run("MATCH (e:Entity) DETACH DELETE e RETURN COUNT(*) as deleted")
+            return result.single()["deleted"]
+        else:
+            # 删除 doc_id 不在有效列表中的实体
+            result = session.run("""
+            MATCH (e:Entity)
+            WHERE NOT e.doc_id IN $valid_ids OR e.doc_id IS NULL
+            DETACH DELETE e
+            RETURN COUNT(*) as deleted
+            """, valid_ids=valid_doc_ids)
+            return result.single()["deleted"]
+
+
 def delete_entity(entity_id: str) -> None:
     driver = get_driver()
     with driver.session() as session:

@@ -166,3 +166,20 @@ INSERT INTO model_configs (provider_id, model_name, model_type, system_prompt, e
  '你是一个逻辑推理专家，请基于提供的知识库内容进行深入分析和推理。\n\n## 参考资料\n{context}\n\n## 对话历史\n{history}',
  NULL, FALSE, TRUE),
 (1, 'deepseek-embedding', 'embedding', NULL, 1536, TRUE, TRUE);
+
+-- ============================================================
+-- 11. token_usage 表（独立记录 token 消耗，不随文档/对话删除）
+-- ============================================================
+CREATE TABLE IF NOT EXISTS token_usage (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    model_name VARCHAR(100) NOT NULL,
+    model_type ENUM('chat','embedding') NOT NULL,
+    tokens_used INT NOT NULL DEFAULT 0,
+    source_type ENUM('qa','document') NOT NULL,
+    source_id INT,
+    source_name VARCHAR(255),
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE INDEX idx_token_usage_model ON token_usage(model_name, model_type);
+CREATE INDEX idx_token_usage_source ON token_usage(source_type, source_id);
