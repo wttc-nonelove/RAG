@@ -16,7 +16,7 @@ EXTRACT_PROMPT = """请从以下文本中提取实体和关系，返回 JSON 格
 
 async def extract(text: str, doc_id: int, doc_name: str, db=None, model_name: str = None) -> dict:
     try:
-        prompt = EXTRACT_PROMPT.format(text=text[:3000])
+        prompt = EXTRACT_PROMPT.format(text=text[:5000])  # 增加到5000字符
         messages = [{"role": "user", "content": prompt}]
 
         if db:
@@ -51,8 +51,35 @@ async def extract(text: str, doc_id: int, doc_name: str, db=None, model_name: st
             try:
                 data = json.loads(raw)
             except json.JSONDecodeError:
-                raw = re.sub(r",\s*([}\]])", r"\1", raw)
-                data = json.loads(raw)
+                # 尝试多种修复方式
+                try:
+                    # 修复尾随逗号
+                    raw = re.sub(r",\s*([}\]])", r"\1", raw)
+                    data = json.loads(raw)
+                except json.JSONDecodeError:
+                    # 修复缺少逗号的情况
+                    raw = re.sub(r'"\s*\n\s*"', '",\n"', raw)
+                    raw = re.sub(r'"\s*}\s*"', '"}', raw)
+                    raw = re.sub(r'"\s*]\s*"', ']', raw)
+                    try:
+                        data = json.loads(raw)
+                    except json.JSONDecodeError:
+                        # 最后尝试：提取 entities 和 relations 数组
+                        entities_match = re.search(r'"entities"\s*:\s*\[(.*?)\]', raw, re.DOTALL)
+                        relations_match = re.search(r'"relations"\s*:\s*\[(.*?)\]', raw, re.DOTALL)
+                        entities = []
+                        relations = []
+                        if entities_match:
+                            try:
+                                entities = json.loads('[' + entities_match.group(1) + ']')
+                            except:
+                                pass
+                        if relations_match:
+                            try:
+                                relations = json.loads('[' + relations_match.group(1) + ']')
+                            except:
+                                pass
+                        data = {"entities": entities, "relations": relations}
             for e in data.get("entities", []):
                 e["doc_id"] = doc_id
                 e["doc_name"] = doc_name

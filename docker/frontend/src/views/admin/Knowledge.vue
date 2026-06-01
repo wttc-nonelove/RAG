@@ -304,7 +304,7 @@ async function handleReparseAll() {
   reparseAllLoading.value = true
   try {
     const res = await reparseAllDocuments()
-    ElMessage.success(res.data.message || '重新解析已触发')
+    ElMessage.success(res.message || '重新解析已触发')
     loadDocs()
     loadStats()
   } catch {

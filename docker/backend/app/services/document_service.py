@@ -81,11 +81,35 @@ async def parse_document(doc_id: int) -> None:
             chroma_repo.add_batch(ids=ids, embeddings=embeddings, documents=chunks, metadatas=metadatas)
 
             try:
-                kg_data = await kg_extract(text[:3000], doc_id, doc.filename, db=db)
-                for entity in kg_data.get("entities", []):
-                    neo4j_repo.create_entity(entity["name"], entity.get("type", "概念"), entity.get("description", ""), doc_id)
-                for rel in kg_data.get("relations", []):
-                    neo4j_repo.create_relation(rel["source"], rel["relation"], rel["target"])
+                # 分段提取知识图谱，每段3000字符，重叠500字符
+                chunk_size = 3000
+                overlap = 500
+                all_entities = []
+                all_relations = []
+                start = 0
+                while start < len(text):
+                    end = min(start + chunk_size, len(text))
+                    chunk = text[start:end]
+                    if len(chunk) >= 200:  # 至少200字符才提取
+                        kg_data = await kg_extract(chunk, doc_id, doc.filename, db=db)
+                        all_entities.extend(kg_data.get("entities", []))
+                        all_relations.extend(kg_data.get("relations", []))
+                    start += chunk_size - overlap
+                    if end >= len(text):
+                        break
+                # 去重并存储
+                seen_entities = set()
+                for entity in all_entities:
+                    key = entity["name"]
+                    if key not in seen_entities:
+                        seen_entities.add(key)
+                        neo4j_repo.create_entity(entity["name"], entity.get("type", "概念"), entity.get("description", ""), doc_id)
+                seen_relations = set()
+                for rel in all_relations:
+                    key = f"{rel['source']}|{rel['relation']}|{rel['target']}"
+                    if key not in seen_relations:
+                        seen_relations.add(key)
+                        neo4j_repo.create_relation(rel["source"], rel["relation"], rel["target"])
             except Exception as e:
                 import loguru
                 loguru.logger.error(f"KG storage failed: {e}")
