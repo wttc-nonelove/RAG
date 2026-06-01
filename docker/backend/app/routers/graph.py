@@ -63,6 +63,14 @@ async def search_graph(q: str = "", user: User = Depends(require_admin), db: Asy
     return ok(data)
 
 
+@router.get("/filter")
+async def filter_by_type(entity_type: str = "", limit: int = 200, user: User = Depends(require_admin), db: AsyncSession = Depends(get_db)):
+    if not entity_type:
+        return ok({"nodes": [], "edges": []})
+    data = kg_service.filter_by_type(entity_type, limit)
+    return ok(data)
+
+
 @router.post("/relations")
 async def create_relation(req: RelationRequest, user: User = Depends(require_admin), db: AsyncSession = Depends(get_db)):
     kg_service.create_relation(req.source, req.relation, req.target)

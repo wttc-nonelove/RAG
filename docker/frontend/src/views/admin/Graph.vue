@@ -14,8 +14,14 @@
           <span style="color:#909399;font-size:13px">节点: {{ graphData.nodes.length }} | 关系: {{ graphData.edges.length }}</span>
         </div>
       </template>
-      <div style="margin-bottom:8px">
-        <el-tag v-for="(color, type) in TYPE_COLORS" :key="type" :color="color" style="margin-right:8px;color:#fff;font-size:12px" size="small">{{ type }}</el-tag>
+      <div style="margin-bottom:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <el-tag :type="activeType === '' ? 'primary' : 'info'" size="small" style="cursor:pointer" @click="clearTypeFilter">全部</el-tag>
+        <el-tag v-for="(color, type) in TYPE_COLORS" :key="type" :color="color"
+          :style="{marginRight:'0',color:'#fff',fontSize:'12px',cursor:'pointer',opacity:activeType===type?1:0.6,border:activeType===type?'2px solid #303133':'none'}"
+          size="small" @click="handleTypeFilter(type)">{{ type }}</el-tag>
+        <span v-if="activeType" style="font-size:12px;color:#909399;margin-left:8px">
+          当前筛选: {{ activeType }} | 节点: {{ filteredNodeCount }} | 关系: {{ filteredEdgeCount }}
+        </span>
       </div>
       <div ref="chartRef" style="width:100%;height:calc(100vh - 310px)"></div>
     </el-card>
@@ -77,11 +83,14 @@
 import { ref, reactive, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import * as echarts from 'echarts'
 import { ElMessage } from 'element-plus'
-import { getGraphOverview, searchGraph, createEntity, deleteEntity } from '../../api/graph'
+import { getGraphOverview, searchGraph, filterByType, createEntity, deleteEntity } from '../../api/graph'
 import client from '../../api/client'
 
 const chartRef = ref(null)
 const searchKey = ref('')
+const activeType = ref('')
+const filteredNodeCount = ref(0)
+const filteredEdgeCount = ref(0)
 let chart = null
 let resizeHandler = null
 
@@ -142,11 +151,33 @@ async function loadGraph() {
 
 async function handleSearch() {
   if (!searchKey.value.trim()) return loadGraph()
+  activeType.value = ''
   try {
     const res = await searchGraph(searchKey.value)
     graphData.value = res.data || { nodes: [], edges: [] }
+    filteredNodeCount.value = graphData.value.nodes.length
+    filteredEdgeCount.value = graphData.value.edges.length
     renderChart()
   } catch (e) { ElMessage.error('搜索失败') }
+}
+
+async function handleTypeFilter(type) {
+  activeType.value = type
+  searchKey.value = ''
+  try {
+    const res = await filterByType(type)
+    graphData.value = res.data || { nodes: [], edges: [] }
+    filteredNodeCount.value = graphData.value.nodes.length
+    filteredEdgeCount.value = graphData.value.edges.length
+    renderChart()
+  } catch (e) { ElMessage.error('筛选失败') }
+}
+
+function clearTypeFilter() {
+  activeType.value = ''
+  filteredNodeCount.value = 0
+  filteredEdgeCount.value = 0
+  loadGraph()
 }
 
 function renderChart() {
