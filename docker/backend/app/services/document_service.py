@@ -81,11 +81,41 @@ async def parse_document(doc_id: int) -> None:
             chroma_repo.add_batch(ids=ids, embeddings=embeddings, documents=chunks, metadatas=metadatas)
 
             try:
-                kg_data = await kg_extract(text[:3000], doc_id, doc.filename, db=db)
-                for entity in kg_data.get("entities", []):
-                    neo4j_repo.create_entity(entity["name"], entity.get("type", "概念"), entity.get("description", ""), doc_id)
-                for rel in kg_data.get("relations", []):
-                    neo4j_repo.create_relation(rel["source"], rel["relation"], rel["target"])
+                # 从数据库读取提取参数配置
+                from app.dao import config_dao
+                config = await config_dao.get_all(db)
+                config_dict = {c.config_key: c.config_value for c in config}
+                kg_chunk_size = int(config_dict.get("kg_chunk_size", "3000"))
+                kg_overlap = int(config_dict.get("kg_overlap", "500"))
+                kg_min_chars = int(config_dict.get("kg_min_chars", "200"))
+
+                # 分段提取知识图谱
+                all_entities = []
+                all_relations = []
+                start = 0
+                while start < len(text):
+                    end = min(start + kg_chunk_size, len(text))
+                    chunk = text[start:end]
+                    if len(chunk) >= kg_min_chars:  # 至少指定字符数才提取
+                        kg_data = await kg_extract(chunk, doc_id, doc.filename, db=db)
+                        all_entities.extend(kg_data.get("entities", []))
+                        all_relations.extend(kg_data.get("relations", []))
+                    start += kg_chunk_size - kg_overlap
+                    if end >= len(text):
+                        break
+                # 去重并存储
+                seen_entities = set()
+                for entity in all_entities:
+                    key = entity["name"]
+                    if key not in seen_entities:
+                        seen_entities.add(key)
+                        neo4j_repo.create_entity(entity["name"], entity.get("type", "概念"), entity.get("description", ""), doc_id)
+                seen_relations = set()
+                for rel in all_relations:
+                    key = f"{rel['source']}|{rel['relation']}|{rel['target']}"
+                    if key not in seen_relations:
+                        seen_relations.add(key)
+                        neo4j_repo.create_relation(rel["source"], rel["relation"], rel["target"])
             except Exception as e:
                 import loguru
                 loguru.logger.error(f"KG storage failed: {e}")
@@ -181,12 +211,14 @@ async def delete_document(db: AsyncSession, doc_id: int) -> None:
         return
     try:
         chroma_repo.delete_by_doc_id(doc_id)
-    except Exception:
-        pass
+    except Exception as e:
+        import loguru
+        loguru.logger.warning(f"ChromaDB delete failed for doc {doc_id}: {e}")
     try:
         neo4j_repo.delete_by_doc_id(doc_id)
-    except Exception:
-        pass
+    except Exception as e:
+        import loguru
+        loguru.logger.warning(f"Neo4j delete failed for doc {doc_id}: {e}")
     file_store.delete_file(doc.file_path)
     await document_dao.delete_doc(db, doc_id)
     await db.commit()

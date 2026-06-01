@@ -38,7 +38,7 @@ def query_subgraph(terms: list[str], limit: int = 20) -> dict:
         return {"nodes": list(nodes.values()), "edges": edges}
 
 
-def get_overview(limit: int = 500) -> dict:
+def get_overview(limit: int = 0) -> dict:
     driver = get_driver()
     with driver.session() as session:
         # 先获取所有实体节点
@@ -56,12 +56,18 @@ def get_overview(limit: int = 500) -> dict:
                 "doc_id": record["doc_id"],
             }
 
-        # 再获取关系
-        edges_result = session.run("""
-        MATCH (e:Entity)-[r]->(t:Entity)
-        RETURN e.name AS source, type(r) AS rel, t.name AS target
-        LIMIT $limit
-        """, limit=limit)
+        # 再获取关系（limit=0 表示不限制）
+        if limit > 0:
+            edges_result = session.run("""
+            MATCH (e:Entity)-[r]->(t:Entity)
+            RETURN e.name AS source, type(r) AS rel, t.name AS target
+            LIMIT $limit
+            """, limit=limit)
+        else:
+            edges_result = session.run("""
+            MATCH (e:Entity)-[r]->(t:Entity)
+            RETURN e.name AS source, type(r) AS rel, t.name AS target
+            """)
         edges = []
         for record in edges_result:
             edges.append({

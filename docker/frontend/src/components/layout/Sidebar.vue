@@ -14,10 +14,23 @@
         router
       >
         <template v-if="auth.isAdmin">
+          <!-- 工作空间 -->
+          <div v-if="!isCollapse" class="menu-group">工作空间</div>
           <el-menu-item index="/dashboard">
             <el-icon><Monitor /></el-icon>
             <span>工作台</span>
           </el-menu-item>
+          <el-menu-item index="/qa">
+            <el-icon><ChatDotRound /></el-icon>
+            <span>智能问答</span>
+          </el-menu-item>
+          <el-menu-item index="/history">
+            <el-icon><Clock /></el-icon>
+            <span>问答历史</span>
+          </el-menu-item>
+
+          <!-- 知识管理 -->
+          <div v-if="!isCollapse" class="menu-group">知识管理</div>
           <el-menu-item index="/knowledge">
             <el-icon><Document /></el-icon>
             <span>知识库管理</span>
@@ -26,13 +39,12 @@
             <el-icon><Share /></el-icon>
             <span>知识图谱</span>
           </el-menu-item>
+
+          <!-- 系统管理 -->
+          <div v-if="!isCollapse" class="menu-group">系统管理</div>
           <el-menu-item index="/users">
             <el-icon><User /></el-icon>
             <span>用户管理</span>
-          </el-menu-item>
-          <el-menu-item index="/history">
-            <el-icon><Clock /></el-icon>
-            <span>问答历史</span>
           </el-menu-item>
           <el-menu-item index="/model">
             <el-icon><Setting /></el-icon>
@@ -43,14 +55,18 @@
             <span>系统配置</span>
           </el-menu-item>
         </template>
-        <el-menu-item index="/qa">
-          <el-icon><ChatDotRound /></el-icon>
-          <span>智能问答</span>
-        </el-menu-item>
-        <el-menu-item index="/my-history">
-          <el-icon><Clock /></el-icon>
-          <span>我的历史</span>
-        </el-menu-item>
+
+        <template v-else>
+          <div v-if="!isCollapse" class="menu-group">功能</div>
+          <el-menu-item index="/qa">
+            <el-icon><ChatDotRound /></el-icon>
+            <span>智能问答</span>
+          </el-menu-item>
+          <el-menu-item index="/my-history">
+            <el-icon><Clock /></el-icon>
+            <span>我的历史</span>
+          </el-menu-item>
+        </template>
       </el-menu>
     </el-aside>
 
@@ -110,5 +126,12 @@ function handleCommand(cmd) {
   display: flex;
   align-items: center;
   justify-content: center;
+}
+.menu-group {
+  padding: 16px 20px 8px;
+  font-size: 11px;
+  color: #ffffff60;
+  text-transform: uppercase;
+  letter-spacing: 1px;
 }
 </style>

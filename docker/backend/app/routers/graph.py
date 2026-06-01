@@ -35,7 +35,7 @@ class UpdateEntityRequest(BaseModel):
 
 
 @router.get("/overview")
-async def graph_overview(limit: int = 500, user: User = Depends(require_admin), db: AsyncSession = Depends(get_db)):
+async def graph_overview(limit: int = 0, user: User = Depends(require_admin), db: AsyncSession = Depends(get_db)):
     data = kg_service.get_overview(limit)
     return ok(data)
 

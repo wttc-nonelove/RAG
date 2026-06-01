@@ -62,10 +62,25 @@
                 <el-button type="warning" :loading="reparseAllLoading">一键重新解析</el-button>
               </template>
             </el-popconfirm>
+            <el-popconfirm title="确定删除所有文档？此操作不可撤销！" @confirm="handleDeleteAll">
+              <template #reference>
+                <el-button type="danger" :loading="deleteAllLoading">一键删除</el-button>
+              </template>
+            </el-popconfirm>
           </div>
         </div>
       </template>
-      <el-table :data="documents" stripe v-loading="loading">
+
+      <!-- 批量操作栏 -->
+      <div v-if="selectedDocs.length > 0" style="margin-bottom:12px;padding:10px;background:#ecf5ff;border-radius:4px;display:flex;align-items:center;gap:12px">
+        <span style="font-size:13px;color:#409eff">已选择 {{ selectedDocs.length }} 个文档</span>
+        <el-button size="small" type="warning" @click="handleBatchReparse">批量重新解析</el-button>
+        <el-button size="small" type="danger" @click="handleBatchDelete">批量删除</el-button>
+        <el-button size="small" @click="selectedDocs = []">取消选择</el-button>
+      </div>
+
+      <el-table :data="documents" stripe v-loading="loading" @selection-change="handleSelectionChange">
+        <el-table-column type="selection" width="50" />
         <el-table-column prop="filename" label="文件名" min-width="200">
           <template #default="{ row }">
             <div style="display:flex;align-items:center;gap:8px">
@@ -159,7 +174,7 @@
 import { ref, reactive, onMounted, markRaw } from 'vue'
 import { ElMessage } from 'element-plus'
 import { UploadFilled, Document, Notebook, Grid, Memo, Files } from '@element-plus/icons-vue'
-import { getDocuments, getDocumentStats, uploadDocument, updateDocument, deleteDocument, reparseDocument, reparseAllDocuments, previewDocument } from '../../api/documents'
+import { getDocuments, getDocumentStats, uploadDocument, updateDocument, deleteDocument, reparseDocument, reparseAllDocuments, deleteAllDocuments, batchDeleteDocuments, batchReparseDocuments, previewDocument } from '../../api/documents'
 
 const fileTypeList = [
   { key: 'PDF', label: 'PDF', color: '#e74c3c', icon: markRaw(Document) },
@@ -216,6 +231,8 @@ const previewData = ref(null)
 const previewPage = ref(1)
 const previewDocId = ref(null)
 const reparseAllLoading = ref(false)
+const deleteAllLoading = ref(false)
+const selectedDocs = ref([])
 
 onMounted(() => {
   loadDocs()
@@ -304,13 +321,58 @@ async function handleReparseAll() {
   reparseAllLoading.value = true
   try {
     const res = await reparseAllDocuments()
-    ElMessage.success(res.data.message || '重新解析已触发')
+    ElMessage.success(res.message || '重新解析已触发')
     loadDocs()
     loadStats()
   } catch {
     ElMessage.error('操作失败')
   } finally {
     reparseAllLoading.value = false
+  }
+}
+
+async function handleDeleteAll() {
+  deleteAllLoading.value = true
+  try {
+    const res = await deleteAllDocuments()
+    ElMessage.success(res.message || '删除完成')
+    loadDocs()
+    loadStats()
+  } catch {
+    ElMessage.error('操作失败')
+  } finally {
+    deleteAllLoading.value = false
+  }
+}
+
+function handleSelectionChange(selection) {
+  selectedDocs.value = selection
+}
+
+async function handleBatchReparse() {
+  if (selectedDocs.value.length === 0) return ElMessage.warning('请先选择文档')
+  try {
+    const ids = selectedDocs.value.map(d => d.id)
+    const res = await batchReparseDocuments(ids)
+    ElMessage.success(res.message || '重新解析已触发')
+    selectedDocs.value = []
+    loadDocs()
+  } catch {
+    ElMessage.error('操作失败')
+  }
+}
+
+async function handleBatchDelete() {
+  if (selectedDocs.value.length === 0) return ElMessage.warning('请先选择文档')
+  try {
+    const ids = selectedDocs.value.map(d => d.id)
+    const res = await batchDeleteDocuments(ids)
+    ElMessage.success(res.message || '删除完成')
+    selectedDocs.value = []
+    loadDocs()
+    loadStats()
+  } catch {
+    ElMessage.error('操作失败')
   }
 }
 
