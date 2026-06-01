@@ -24,7 +24,7 @@ CREATE TABLE IF NOT EXISTS users (
 CREATE TABLE IF NOT EXISTS documents (
     id INT AUTO_INCREMENT PRIMARY KEY,
     filename VARCHAR(255) NOT NULL,
-    file_type ENUM('PDF','DOCX','TXT') NOT NULL,
+    file_type ENUM('PDF','DOCX','TXT','MD','XLSX','XLS','CSV') NOT NULL,
     file_size BIGINT NOT NULL,
     file_path VARCHAR(500) NOT NULL,
     tag VARCHAR(100),
@@ -64,6 +64,7 @@ CREATE TABLE IF NOT EXISTS messages (
     role ENUM('user','bot') NOT NULL,
     content TEXT NOT NULL,
     sources JSON,
+    kg_references JSON,
     model_name VARCHAR(100),
     tokens_used INT,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,

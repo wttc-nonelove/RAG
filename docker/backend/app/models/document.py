@@ -8,7 +8,7 @@ class Document(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     filename = Column(String(255), nullable=False)
-    file_type = Column(Enum("PDF", "DOCX", "TXT"), nullable=False)
+    file_type = Column(Enum("PDF", "DOCX", "TXT", "MD", "XLSX", "XLS", "CSV"), nullable=False)
     file_size = Column(BigInteger, nullable=False)
     file_path = Column(String(500), nullable=False)
     tag = Column(String(100))

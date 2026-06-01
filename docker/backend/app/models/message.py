@@ -11,6 +11,7 @@ class Message(Base):
     role = Column(Enum("user", "bot"), nullable=False)
     content = Column(Text, nullable=False)
     sources = Column(JSON)
+    kg_references = Column(JSON)
     model_name = Column(String(100))
     tokens_used = Column(Integer)
     created_at = Column(DateTime, server_default=func.now())

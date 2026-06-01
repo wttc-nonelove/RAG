@@ -38,6 +38,12 @@ async def ask_question(req: AskRequest, user: User = Depends(get_current_user), 
     if not conv or conv.user_id != user.id:
         raise HTTPException(status_code=403, detail="无权访问该会话")
 
+    # 自动更新对话标题（如果还是默认标题）
+    if conv.title == "New Conversation":
+        new_title = req.question[:50]
+        await conversation_dao.update_title(db, conv_id, new_title)
+        await db.commit()
+
     # Resolve model_name: use provided, or default from DB
     model_name = req.model_name
     if not model_name:
@@ -83,7 +89,8 @@ async def get_messages(conv_id: int, user: User = Depends(get_current_user), db:
     return ok([
         {
             "id": m.id, "role": m.role, "content": m.content,
-            "sources": m.sources, "model_name": m.model_name,
+            "sources": m.sources, "kg_references": m.kg_references,
+            "model_name": m.model_name,
             "tokens_used": m.tokens_used, "created_at": str(m.created_at),
         }
         for m in messages

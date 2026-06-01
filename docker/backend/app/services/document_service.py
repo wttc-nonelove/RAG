@@ -11,7 +11,28 @@ from app.utils.kg_extractor import extract as kg_extract
 from app.dao import neo4j_repo
 
 
-ALLOWED_TYPES = {"PDF": ".pdf", "DOCX": ".docx", "TXT": ".txt"}
+ALLOWED_TYPES = {"PDF": ".pdf", "DOCX": ".docx", "TXT": ".txt", "MD": ".md", "XLSX": ".xlsx", "XLS": ".xls", "CSV": ".csv"}
+
+
+async def get_document_stats(db: AsyncSession) -> dict:
+    from sqlalchemy import select, func
+    # 总文件数
+    total = (await db.execute(select(func.count()).select_from(Document))).scalar()
+    # 各类型文件数
+    type_result = await db.execute(
+        select(Document.file_type, func.count()).group_by(Document.file_type)
+    )
+    type_counts = {row[0]: row[1] for row in type_result.all()}
+    # 各状态文件数
+    status_result = await db.execute(
+        select(Document.parse_status, func.count()).group_by(Document.parse_status)
+    )
+    status_counts = {row[0]: row[1] for row in status_result.all()}
+    return {
+        "total": total,
+        "type_counts": type_counts,
+        "status_counts": status_counts,
+    }
 
 
 def _detect_type(filename: str) -> str:
@@ -60,7 +81,7 @@ async def parse_document(doc_id: int) -> None:
             chroma_repo.add_batch(ids=ids, embeddings=embeddings, documents=chunks, metadatas=metadatas)
 
             try:
-                kg_data = await kg_extract(text[:3000], doc_id, doc.filename)
+                kg_data = await kg_extract(text[:3000], doc_id, doc.filename, db=db)
                 for entity in kg_data.get("entities", []):
                     neo4j_repo.create_entity(entity["name"], entity.get("type", "概念"), entity.get("description", ""), doc_id)
                 for rel in kg_data.get("relations", []):
@@ -76,6 +97,29 @@ async def parse_document(doc_id: int) -> None:
         await db.commit()
 
 
+async def extract_kg_for_doc(doc_id: int) -> None:
+    """手动触发指定文档的知识图谱抽取"""
+    from app.database import async_session
+    async with async_session() as db:
+        doc = await document_dao.get_by_id(db, doc_id)
+        if not doc:
+            return
+        try:
+            text = _extract_text(doc.file_path, doc.file_type)
+            text = clean_text(text)
+            # 先删除旧的实体关系
+            neo4j_repo.delete_by_doc_id(doc_id)
+            # 重新抽取
+            kg_data = await kg_extract(text[:3000], doc_id, doc.filename, db=db)
+            for entity in kg_data.get("entities", []):
+                neo4j_repo.create_entity(entity["name"], entity.get("type", "概念"), entity.get("description", ""), doc_id)
+            for rel in kg_data.get("relations", []):
+                neo4j_repo.create_relation(rel["source"], rel["relation"], rel["target"])
+        except Exception as e:
+            import loguru
+            loguru.logger.error(f"KG re-extraction failed: {e}")
+
+
 def _extract_text(filepath: str, file_type: str) -> str:
     if file_type == "PDF":
         with pdfplumber.open(filepath) as pdf:
@@ -83,9 +127,32 @@ def _extract_text(filepath: str, file_type: str) -> str:
     elif file_type == "DOCX":
         doc = DocxDocument(filepath)
         return "\n\n".join(p.text for p in doc.paragraphs if p.text.strip())
-    elif file_type == "TXT":
+    elif file_type in ("TXT", "MD"):
         with open(filepath, "r", encoding="utf-8", errors="ignore") as f:
             return f.read()
+    elif file_type in ("XLSX", "XLS"):
+        from openpyxl import load_workbook
+        wb = load_workbook(filepath, read_only=True, data_only=True)
+        lines = []
+        for sheet in wb.sheetnames:
+            ws = wb[sheet]
+            lines.append(f"【{sheet}】")
+            for row in ws.iter_rows(values_only=True):
+                row_text = "\t".join(str(cell) if cell is not None else "" for cell in row)
+                if row_text.strip():
+                    lines.append(row_text)
+        wb.close()
+        return "\n".join(lines)
+    elif file_type == "CSV":
+        import csv
+        lines = []
+        with open(filepath, "r", encoding="utf-8", errors="ignore") as f:
+            reader = csv.reader(f)
+            for row in reader:
+                row_text = "\t".join(row)
+                if row_text.strip():
+                    lines.append(row_text)
+        return "\n".join(lines)
     raise ValueError(f"不支持的文件类型: {file_type}")
 
 

@@ -8,6 +8,9 @@ from app.dao import chroma_repo, neo4j_repo
 
 
 async def get_stats(db: AsyncSession) -> dict:
+    from datetime import datetime
+    today = datetime.now().date()
+
     total_documents = (await db.execute(select(func.count()).select_from(Document))).scalar()
     total_questions = (await db.execute(select(func.count()).select_from(Message).where(Message.role == "user"))).scalar()
     total_users = (await db.execute(select(func.count()).select_from(User))).scalar()
@@ -16,11 +19,44 @@ async def get_stats(db: AsyncSession) -> dict:
         total_chunks = chroma_repo.count()
     except Exception:
         pass
+
+    # 解析成功率
+    completed_docs = (await db.execute(
+        select(func.count()).select_from(Document).where(Document.parse_status == "completed")
+    )).scalar()
+    parse_success_rate = round(completed_docs / total_documents * 100, 1) if total_documents > 0 else 0
+
+    # 今日问答数
+    today_questions = (await db.execute(
+        select(func.count()).select_from(Message).where(
+            func.date(Message.created_at) == today, Message.role == "user"
+        )
+    )).scalar()
+
+    # 活跃用户数（近7天有问答的用户）
+    from datetime import timedelta
+    week_ago = today - timedelta(days=7)
+    active_users = (await db.execute(
+        select(func.count(func.distinct(Conversation.user_id))).where(
+            Conversation.updated_at >= week_ago
+        )
+    )).scalar()
+
+    # 文档类型分布
+    type_result = await db.execute(
+        select(Document.file_type, func.count()).group_by(Document.file_type)
+    )
+    type_counts = {row[0]: row[1] for row in type_result.all()}
+
     return {
         "total_documents": total_documents,
         "total_questions": total_questions,
         "total_users": total_users,
         "total_chunks": total_chunks,
+        "parse_success_rate": parse_success_rate,
+        "today_questions": today_questions,
+        "active_users": active_users,
+        "type_counts": type_counts,
     }
 
 
