@@ -38,21 +38,38 @@ def query_subgraph(terms: list[str], limit: int = 20) -> dict:
         return {"nodes": list(nodes.values()), "edges": edges}
 
 
-def get_overview(limit: int = 200) -> dict:
+def get_overview(limit: int = 500) -> dict:
     driver = get_driver()
     with driver.session() as session:
-        result = session.run("""
+        # 先获取所有实体节点
+        nodes_result = session.run("""
+        MATCH (e:Entity)
+        RETURN e.name AS name, e.type AS type, e.description AS description, e.doc_id AS doc_id
+        """)
+        nodes = {}
+        for record in nodes_result:
+            name = record["name"]
+            nodes[name] = {
+                "name": name,
+                "type": record["type"] or "概念",
+                "description": record["description"] or "",
+                "doc_id": record["doc_id"],
+            }
+
+        # 再获取关系
+        edges_result = session.run("""
         MATCH (e:Entity)-[r]->(t:Entity)
         RETURN e.name AS source, type(r) AS rel, t.name AS target
         LIMIT $limit
         """, limit=limit)
-        nodes = {}
         edges = []
-        for record in result:
-            s, r, t = record["source"], record["rel"], record["target"]
-            nodes[s] = {"name": s}
-            nodes[t] = {"name": t}
-            edges.append({"source": s, "rel": r, "target": t})
+        for record in edges_result:
+            edges.append({
+                "source": record["source"],
+                "rel": record["rel"],
+                "target": record["target"],
+            })
+
         return {"nodes": list(nodes.values()), "edges": edges}
 
 

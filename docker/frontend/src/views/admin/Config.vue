@@ -1,39 +1,95 @@
 <template>
   <div>
     <h2>系统配置</h2>
+
+    <!-- 模型参数配置 -->
     <el-card style="margin-top:20px">
+      <template #header>
+        <span style="font-weight:bold">模型参数配置</span>
+      </template>
       <el-form label-width="160px">
         <el-form-item label="Temperature">
-          <el-slider v-model="config.temperature" :min="0" :max="2" :step="0.1" show-input />
+          <el-slider v-model="config.temperature" :min="0" :max="2" :step="0.1" show-input style="width:300px" />
         </el-form-item>
         <el-form-item label="Top-P">
-          <el-slider v-model="config.top_p" :min="0" :max="1" :step="0.05" show-input />
+          <el-slider v-model="config.top_p" :min="0" :max="1" :step="0.05" show-input style="width:300px" />
         </el-form-item>
         <el-form-item label="Max Tokens">
           <el-input-number v-model="config.max_tokens" :min="256" :max="8192" :step="256" />
         </el-form-item>
+      </el-form>
+    </el-card>
+
+    <!-- 检索参数配置 -->
+    <el-card style="margin-top:20px">
+      <template #header>
+        <span style="font-weight:bold">检索参数配置</span>
+      </template>
+      <el-form label-width="160px">
         <el-form-item label="Top-K">
           <el-input-number v-model="config.top_k" :min="1" :max="20" />
         </el-form-item>
         <el-form-item label="相似度阈值">
-          <el-slider v-model="config.similarity_threshold" :min="0" :max="1" :step="0.05" show-input />
+          <el-slider v-model="config.similarity_threshold" :min="0" :max="1" :step="0.05" show-input style="width:300px" />
         </el-form-item>
-        <el-form-item label="分块大小">
-          <el-input-number v-model="config.chunk_size" :min="128" :max="2048" :step="64" />
-        </el-form-item>
-        <el-form-item label="分块重叠">
-          <el-input-number v-model="config.chunk_overlap" :min="0" :max="512" :step="32" />
+        <el-form-item label="历史轮数">
+          <el-input-number v-model="config.history_rounds" :min="0" :max="20" />
         </el-form-item>
         <el-form-item label="启用知识图谱">
           <el-switch v-model="config.kg_enabled" />
         </el-form-item>
-        <el-form-item label="历史轮数">
-          <el-input-number v-model="config.history_rounds" :min="0" :max="20" />
+      </el-form>
+    </el-card>
+
+    <!-- 分块策略配置 -->
+    <el-card style="margin-top:20px">
+      <template #header>
+        <span style="font-weight:bold">分块策略配置</span>
+      </template>
+      <el-form label-width="160px">
+        <el-form-item label="Chunk 大小（字符数）">
+          <el-input-number v-model="config.chunk_size" :min="128" :max="2048" :step="64" />
+        </el-form-item>
+        <el-form-item label="重叠长度（字符数）">
+          <el-input-number v-model="config.chunk_overlap" :min="0" :max="512" :step="32" />
         </el-form-item>
         <el-form-item>
           <el-button type="primary" @click="handleSave">保存配置</el-button>
         </el-form-item>
       </el-form>
+    </el-card>
+
+    <!-- 系统信息 -->
+    <el-card style="margin-top:20px">
+      <template #header>
+        <span style="font-weight:bold">系统信息</span>
+      </template>
+      <el-descriptions :column="2" border>
+        <el-descriptions-item label="系统版本">v1.0.0</el-descriptions-item>
+        <el-descriptions-item label="Python">3.11</el-descriptions-item>
+        <el-descriptions-item label="FastAPI">0.115.x</el-descriptions-item>
+        <el-descriptions-item label="ChromaDB">
+          <el-tag :type="systemStatus.chromadb === 'ok' ? 'success' : 'danger'" size="small">
+            {{ systemStatus.chromadb === 'ok' ? '连接正常' : '连接异常' }}
+          </el-tag>
+        </el-descriptions-item>
+        <el-descriptions-item label="Neo4j">
+          <el-tag :type="systemStatus.neo4j === 'ok' ? 'success' : 'danger'" size="small">
+            {{ systemStatus.neo4j === 'ok' ? '连接正常' : '连接异常' }}
+          </el-tag>
+        </el-descriptions-item>
+        <el-descriptions-item label="MySQL">
+          <el-tag :type="systemStatus.mysql === 'ok' ? 'success' : 'danger'" size="small">
+            {{ systemStatus.mysql === 'ok' ? '连接正常' : '连接异常' }}
+          </el-tag>
+        </el-descriptions-item>
+        <el-descriptions-item label="Redis">
+          <el-tag :type="systemStatus.redis === 'ok' ? 'success' : 'danger'" size="small">
+            {{ systemStatus.redis === 'ok' ? '连接正常' : '连接异常' }}
+          </el-tag>
+        </el-descriptions-item>
+        <el-descriptions-item label="文件存储">本地磁盘 — 已用 {{ storage.documents_mb }} MB</el-descriptions-item>
+      </el-descriptions>
     </el-card>
   </div>
 </template>
@@ -42,6 +98,7 @@
 import { reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import client from '../../api/client'
+import { getSystemStatus, getStorage } from '../../api/dashboard'
 
 const config = reactive({
   temperature: 0.7,
@@ -53,6 +110,17 @@ const config = reactive({
   chunk_overlap: 128,
   kg_enabled: true,
   history_rounds: 5,
+})
+
+const systemStatus = reactive({
+  mysql: 'ok',
+  redis: 'ok',
+  neo4j: 'ok',
+  chromadb: 'ok',
+})
+
+const storage = reactive({
+  documents_mb: 0,
 })
 
 onMounted(async () => {
@@ -68,6 +136,16 @@ onMounted(async () => {
     if (data.chunk_overlap != null) config.chunk_overlap = parseInt(data.chunk_overlap)
     if (data.kg_enabled != null) config.kg_enabled = data.kg_enabled === 'true'
     if (data.history_rounds != null) config.history_rounds = parseInt(data.history_rounds)
+  } catch {}
+  // 加载系统状态
+  try {
+    const statusRes = await getSystemStatus()
+    Object.assign(systemStatus, statusRes.data)
+  } catch {}
+  // 加载存储信息
+  try {
+    const storageRes = await getStorage()
+    storage.documents_mb = storageRes.data.documents_mb || 0
   } catch {}
 })
 

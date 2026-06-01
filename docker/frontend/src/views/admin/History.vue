@@ -1,6 +1,29 @@
 <template>
   <div>
     <h2>问答历史</h2>
+
+    <!-- 统计卡片 -->
+    <el-row :gutter="20" style="margin-top:20px">
+      <el-col :span="8">
+        <el-card shadow="hover" body-style="padding:20px">
+          <div style="font-size:13px;color:#909399">今日问答数</div>
+          <div style="font-size:28px;font-weight:bold;color:#409eff;margin-top:8px">{{ stats.today_questions }}</div>
+        </el-card>
+      </el-col>
+      <el-col :span="8">
+        <el-card shadow="hover" body-style="padding:20px">
+          <div style="font-size:13px;color:#909399">最热门文档</div>
+          <div style="font-size:16px;font-weight:bold;color:#67c23a;margin-top:8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ stats.hot_doc || '-' }}</div>
+        </el-card>
+      </el-col>
+      <el-col :span="8">
+        <el-card shadow="hover" body-style="padding:20px">
+          <div style="font-size:13px;color:#909399">高频关键词</div>
+          <div style="font-size:16px;font-weight:bold;color:#e6a23c;margin-top:8px">{{ stats.hot_keyword || '-' }}</div>
+        </el-card>
+      </el-col>
+    </el-row>
+
     <el-card style="margin-top:20px">
       <el-table :data="history" stripe v-loading="loading">
         <el-table-column prop="id" label="ID" width="80" />
@@ -35,9 +58,10 @@
 </template>
 
 <script setup>
-import { ref, onMounted, nextTick } from 'vue'
+import { ref, reactive, onMounted, nextTick } from 'vue'
 import MarkdownIt from 'markdown-it'
 import { getAdminHistory } from '../../api/history'
+import { getStats } from '../../api/dashboard'
 import client from '../../api/client'
 
 const md = new MarkdownIt()
@@ -47,11 +71,33 @@ const page = ref(1)
 const size = 20
 const total = ref(0)
 
+const stats = reactive({
+  today_questions: 0,
+  hot_doc: '',
+  hot_keyword: '',
+})
+
 const showDetail = ref(false)
 const detailMessages = ref([])
 const detailChat = ref(null)
 
-onMounted(() => loadHistory())
+onMounted(() => {
+  loadHistory()
+  loadStats()
+})
+
+async function loadStats() {
+  try {
+    const res = await getStats()
+    stats.today_questions = res.data.today_questions || 0
+    // 获取最热门文档（从文档类型推断）
+    const typeCounts = res.data.type_counts || {}
+    if (Object.keys(typeCounts).length > 0) {
+      const hotType = Object.entries(typeCounts).sort((a, b) => b[1] - a[1])[0]
+      stats.hot_doc = hotType[0] + ' (' + hotType[1] + '份)'
+    }
+  } catch {}
+}
 
 async function loadHistory() {
   loading.value = true
@@ -59,6 +105,18 @@ async function loadHistory() {
     const res = await getAdminHistory({ page: page.value, size })
     history.value = res.data.items || []
     total.value = res.data.total || 0
+    // 从历史记录中提取高频关键词
+    if (history.value.length > 0) {
+      const keywords = {}
+      history.value.forEach(h => {
+        const words = h.question.match(/[一-龥]{2,}/g) || []
+        words.forEach(w => {
+          if (w.length >= 2) keywords[w] = (keywords[w] || 0) + 1
+        })
+      })
+      const sorted = Object.entries(keywords).sort((a, b) => b[1] - a[1])
+      if (sorted.length > 0) stats.hot_keyword = sorted[0][0]
+    }
   } catch {} finally {
     loading.value = false
   }

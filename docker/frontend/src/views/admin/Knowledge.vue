@@ -79,6 +79,11 @@
             <el-tag :color="getFileColor(row.file_type)" style="color:#fff;border:none" size="small">{{ row.file_type }}</el-tag>
           </template>
         </el-table-column>
+        <el-table-column label="大小" width="100">
+          <template #default="{ row }">
+            <span style="font-size:12px;color:#606266">{{ formatFileSize(row.file_size) }}</span>
+          </template>
+        </el-table-column>
         <el-table-column prop="parse_status" label="状态" width="100">
           <template #default="{ row }">
             <el-tag :type="row.parse_status === 'completed' ? 'success' : row.parse_status === 'failed' ? 'danger' : 'warning'">
@@ -176,6 +181,13 @@ function getFileIcon(type) {
 function getFileColor(type) {
   const ft = fileTypeList.find(f => f.key === type)
   return ft ? ft.color : '#909399'
+}
+
+function formatFileSize(bytes) {
+  if (!bytes) return '-'
+  if (bytes < 1024) return bytes + ' B'
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'
+  return (bytes / 1024 / 1024).toFixed(1) + ' MB'
 }
 
 const docStats = reactive({

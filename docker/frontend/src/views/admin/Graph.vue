@@ -123,6 +123,7 @@
           <el-descriptions-item label="类型">
             <el-tag :color="TYPE_COLORS[selectedNode.type] || '#909399'" style="color:#fff;border:none">{{ selectedNode.type }}</el-tag>
           </el-descriptions-item>
+          <el-descriptions-item label="来源文档">{{ selectedNode.doc_name || '未知' }}</el-descriptions-item>
           <el-descriptions-item label="描述">{{ selectedNode.description || '暂无描述' }}</el-descriptions-item>
         </el-descriptions>
 
@@ -359,11 +360,21 @@ async function handleDeleteRelation(rel) {
 async function handleNodeClick(nodeName) {
   const node = graphData.value.nodes.find(n => n.name === nodeName)
   if (!node) return
-  selectedNode.value = node
+  selectedNode.value = { ...node, doc_name: '' }
   editEntityForm.name = node.name
   editEntityForm.type = node.type || '概念'
   editEntityForm.description = node.description || ''
   showNodeDetail.value = true
+  // 获取来源文档名称
+  if (node.doc_id) {
+    try {
+      const { getDocument } = await import('../../api/documents')
+      const docRes = await getDocument(node.doc_id)
+      selectedNode.value.doc_name = docRes.data.filename || '未知'
+    } catch {
+      selectedNode.value.doc_name = '未知'
+    }
+  }
   try {
     const res = await getEntityNeighbors(nodeName)
     nodeNeighbors.value = res.data || []
