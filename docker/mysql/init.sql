@@ -64,6 +64,7 @@ CREATE TABLE IF NOT EXISTS messages (
     role ENUM('user','bot') NOT NULL,
     content TEXT NOT NULL,
     sources JSON,
+    kg_references JSON,
     model_name VARCHAR(100),
     tokens_used INT,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,

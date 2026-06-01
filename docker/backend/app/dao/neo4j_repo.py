@@ -17,17 +17,23 @@ def query_subgraph(terms: list[str], limit: int = 20) -> dict:
     with driver.session() as session:
         cypher = """
         MATCH (e:Entity)-[r]->(t:Entity)
-        WHERE any(term IN $terms WHERE e.name CONTAINS term OR t.name CONTAINS term)
-        RETURN e.name AS source, type(r) AS rel, t.name AS target
+        WHERE any(term IN $terms WHERE e.name CONTAINS term OR t.name CONTAINS term OR term CONTAINS e.name OR term CONTAINS t.name)
+        RETURN e.name AS source, e.type AS source_type, e.description AS source_desc,
+               type(r) AS rel,
+               t.name AS target, t.type AS target_type, t.description AS target_desc
         LIMIT $limit
         """
         result = session.run(cypher, terms=terms, limit=limit)
         nodes = {}
         edges = []
         for record in result:
-            s, r, t = record["source"], record["rel"], record["target"]
-            nodes[s] = {"name": s}
-            nodes[t] = {"name": t}
+            s, s_type, s_desc = record["source"], record["source_type"], record["source_desc"]
+            r = record["rel"]
+            t, t_type, t_desc = record["target"], record["target_type"], record["target_desc"]
+            if s not in nodes:
+                nodes[s] = {"name": s, "type": s_type or "概念", "description": s_desc or ""}
+            if t not in nodes:
+                nodes[t] = {"name": t, "type": t_type or "概念", "description": t_desc or ""}
             edges.append({"source": s, "rel": r, "target": t})
         return {"nodes": list(nodes.values()), "edges": edges}
 

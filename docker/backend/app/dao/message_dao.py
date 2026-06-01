@@ -5,12 +5,14 @@ from typing import Optional, List
 
 
 async def create(db: AsyncSession, conversation_id: int, role: str, content: str,
-                 sources: list = None, model_name: str = None, tokens_used: int = None) -> Message:
+                 sources: list = None, kg_references: dict = None,
+                 model_name: str = None, tokens_used: int = None) -> Message:
     msg = Message(
         conversation_id=conversation_id,
         role=role,
         content=content,
         sources=sources,
+        kg_references=kg_references,
         model_name=model_name,
         tokens_used=tokens_used,
     )

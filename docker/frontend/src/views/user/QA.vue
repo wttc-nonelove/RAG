@@ -26,6 +26,32 @@
                   {{ s.doc_name }} {{ s.page ? `p.${s.page}` : '' }}
                 </el-tag>
               </div>
+              <div v-if="msg.kg_references && (msg.kg_references.entities?.length || msg.kg_references.edges?.length)" style="margin-top:8px;border-top:1px solid #ddd;padding-top:8px">
+                <div style="font-size:12px;color:#909399;margin-bottom:6px">知识图谱引用：</div>
+                <div v-if="msg.kg_references.entities?.length" style="margin-bottom:6px">
+                  <span style="font-size:12px;color:#606266;margin-right:4px">实体：</span>
+                  <el-popover v-for="entity in msg.kg_references.entities" :key="entity.name" trigger="hover" width="220" placement="top">
+                    <template #reference>
+                      <el-tag size="small" :color="TYPE_COLORS[entity.type] || '#909399'" style="margin:2px;cursor:pointer;color:#fff;border:none">
+                        {{ entity.name }}
+                      </el-tag>
+                    </template>
+                    <div style="font-size:13px">
+                      <div style="font-weight:bold;margin-bottom:4px">{{ entity.name }}</div>
+                      <div style="color:#909399;font-size:12px;margin-bottom:4px">类型：{{ entity.type }}</div>
+                      <div v-if="entity.description" style="color:#606266;font-size:12px;line-height:1.5">{{ entity.description }}</div>
+                    </div>
+                  </el-popover>
+                </div>
+                <div v-if="msg.kg_references.edges?.length">
+                  <span style="font-size:12px;color:#606266;margin-right:4px">关系：</span>
+                  <div v-for="(edge, i) in msg.kg_references.edges" :key="i" style="font-size:12px;color:#606266;padding:3px 0;display:flex;align-items:center;gap:4px">
+                    <el-tag size="small" :color="getEntityColor(msg.kg_references.entities, edge.source)" style="color:#fff;border:none;font-size:11px">{{ edge.source }}</el-tag>
+                    <span style="color:#909399">—[{{ edge.rel }}]→</span>
+                    <el-tag size="small" :color="getEntityColor(msg.kg_references.entities, edge.target)" style="color:#fff;border:none;font-size:11px">{{ edge.target }}</el-tag>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
           <div v-if="qa.messages.length === 0" style="text-align:center;color:#c0c4cc;padding-top:100px">
@@ -61,6 +87,14 @@ const question = ref('')
 const modelName = ref('deepseek-chat')
 const models = ref([])
 const chatArea = ref(null)
+
+const TYPE_COLORS = { '人物':'#5470c6','组织':'#91cc75','地点':'#fac858','概念':'#ee6666','技术':'#73c0de','产品':'#3ba272','事件':'#fc8452' }
+
+function getEntityColor(entities, name) {
+  if (!entities) return '#909399'
+  const entity = entities.find(e => e.name === name)
+  return entity ? (TYPE_COLORS[entity.type] || '#909399') : '#909399'
+}
 
 onMounted(async () => {
   await qa.loadConversations()

@@ -56,13 +56,14 @@ async def rag_pipeline(db: AsyncSession, conversation_id: int, question: str, mo
 
     if max_similarity < threshold:
         fallback_answer = "知识库中暂无相关信息，请尝试更换问题或补充相关文档。"
-        msg = await message_dao.create(db, conversation_id, "bot", fallback_answer, sources=[], model_name=None)
+        msg = await message_dao.create(db, conversation_id, "bot", fallback_answer, sources=[], kg_references=None, model_name=None)
         await db.commit()
         elapsed = int((time.time() - start_time) * 1000)
         return {
             "message_id": msg.id,
             "answer": fallback_answer,
             "sources": [],
+            "kg_references": None,
             "model_used": None,
             "tokens_used": 0,
             "response_time_ms": elapsed,
@@ -71,15 +72,25 @@ async def rag_pipeline(db: AsyncSession, conversation_id: int, question: str, mo
         }
 
     kg_context = ""
+    kg_references = None
     if kg_enabled:
         try:
             import re
-            terms = re.findall(r"[一-鿿]{2,}", question)
+            # 用正则提取中文词（2字以上），再用问题全文匹配实体
+            raw_terms = re.findall(r"[一-鿿]{2,}", question)
+            terms = list(set(raw_terms))
+            # 额外用问题全文作为查询词，让 CONTAINS 匹配实体名
+            if question not in terms:
+                terms.append(question)
             if terms:
-                kg_data = neo4j_repo.query_subgraph(terms[:3])
+                kg_data = neo4j_repo.query_subgraph(terms[:5])
                 if kg_data["edges"]:
                     kg_lines = [f"{e['source']} --[{e['rel']}]--> {e['target']}" for e in kg_data["edges"][:5]]
                     kg_context = "\n\n## 知识图谱补充\n" + "\n".join(kg_lines)
+                    kg_references = {
+                        "entities": kg_data["nodes"],
+                        "edges": kg_data["edges"],
+                    }
         except Exception:
             pass
 
@@ -132,7 +143,7 @@ async def rag_pipeline(db: AsyncSession, conversation_id: int, question: str, mo
     answer = llm_result["content"]
     tokens_used = llm_result["tokens_used"]
 
-    msg = await message_dao.create(db, conversation_id, "bot", answer, sources=sources, model_name=model_name, tokens_used=tokens_used)
+    msg = await message_dao.create(db, conversation_id, "bot", answer, sources=sources, kg_references=kg_references, model_name=model_name, tokens_used=tokens_used)
     await db.commit()
 
     elapsed = int((time.time() - start_time) * 1000)
@@ -140,6 +151,7 @@ async def rag_pipeline(db: AsyncSession, conversation_id: int, question: str, mo
         "message_id": msg.id,
         "answer": answer,
         "sources": sources,
+        "kg_references": kg_references,
         "model_used": model_name,
         "tokens_used": tokens_used,
         "response_time_ms": elapsed,

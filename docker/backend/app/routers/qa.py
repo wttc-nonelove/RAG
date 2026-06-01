@@ -83,7 +83,8 @@ async def get_messages(conv_id: int, user: User = Depends(get_current_user), db:
     return ok([
         {
             "id": m.id, "role": m.role, "content": m.content,
-            "sources": m.sources, "model_name": m.model_name,
+            "sources": m.sources, "kg_references": m.kg_references,
+            "model_name": m.model_name,
             "tokens_used": m.tokens_used, "created_at": str(m.created_at),
         }
         for m in messages
