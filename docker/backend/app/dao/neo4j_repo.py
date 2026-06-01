@@ -131,24 +131,39 @@ def search(keyword: str, limit: int = 20) -> dict:
 def filter_by_type(entity_type: str, limit: int = 200) -> dict:
     driver = get_driver()
     with driver.session() as session:
-        result = session.run("""
+        # 先获取该类型的所有实体（包括孤立节点）
+        nodes_result = session.run("""
+        MATCH (e:Entity)
+        WHERE e.type = $entity_type
+        RETURN e.name AS name, e.type AS type, e.description AS description, e.doc_id AS doc_id
+        """, entity_type=entity_type)
+        nodes = {}
+        for record in nodes_result:
+            name = record["name"]
+            nodes[name] = {
+                "name": name,
+                "type": record["type"] or "概念",
+                "description": record["description"] or "",
+                "doc_id": record["doc_id"],
+            }
+
+        # 再获取涉及该类型实体的关系
+        edges_result = session.run("""
         MATCH (e:Entity)-[r]->(t:Entity)
         WHERE e.type = $entity_type OR t.type = $entity_type
-        RETURN e.name AS source, e.type AS source_type, e.description AS source_desc,
-               type(r) AS rel,
-               t.name AS target, t.type AS target_type, t.description AS target_desc
+        RETURN e.name AS source, type(r) AS rel, t.name AS target
         LIMIT $limit
         """, entity_type=entity_type, limit=limit)
-        nodes = {}
         edges = []
-        for record in result:
-            s, s_type, s_desc = record["source"], record["source_type"], record["source_desc"]
+        for record in edges_result:
+            s = record["source"]
             r = record["rel"]
-            t, t_type, t_desc = record["target"], record["target_type"], record["target_desc"]
+            t = record["target"]
+            # 如果关系中的实体不在 nodes 中，添加它们
             if s not in nodes:
-                nodes[s] = {"name": s, "type": s_type or "概念", "description": s_desc or ""}
+                nodes[s] = {"name": s, "type": "概念", "description": ""}
             if t not in nodes:
-                nodes[t] = {"name": t, "type": t_type or "概念", "description": t_desc or ""}
+                nodes[t] = {"name": t, "type": "概念", "description": ""}
             edges.append({"source": s, "rel": r, "target": t})
         return {"nodes": list(nodes.values()), "edges": edges}
 
