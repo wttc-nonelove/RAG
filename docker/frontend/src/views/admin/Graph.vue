@@ -78,7 +78,7 @@
           <el-input v-model="entityForm.name" />
         </el-form-item>
         <el-form-item label="类型">
-          <el-select v-model="entityForm.type" style="width:100%">
+          <el-select v-model="entityForm.type" filterable allow-create style="width:100%">
             <el-option v-for="t in entityTypes" :key="t" :label="t" :value="t" />
           </el-select>
         </el-form-item>
@@ -160,7 +160,7 @@
           <el-input v-model="editEntityForm.name" disabled />
         </el-form-item>
         <el-form-item label="类型">
-          <el-select v-model="editEntityForm.type" style="width:100%">
+          <el-select v-model="editEntityForm.type" filterable allow-create style="width:100%">
             <el-option v-for="t in entityTypes" :key="t" :label="t" :value="t" />
           </el-select>
         </el-form-item>
@@ -200,10 +200,25 @@ let resizeHandler = null
 const graphData = ref({ nodes: [], edges: [] })
 const relations = ref([])
 
-const entityTypes = ['人物', '组织', '地点', '概念', '技术', '产品', '事件', '制度', '指标', '流程']
-const COLORS = ['#5470c6','#91cc75','#fac858','#ee6666','#73c0de','#3ba272','#fc8452','#9a60b4','#ea7ccc','#48b8d0']
-const TYPE_MAP = { '人物':0, '组织':1, '地点':2, '概念':3, '技术':4, '产品':5, '事件':6, '制度':7, '指标':8, '流程':9 }
-const TYPE_COLORS = { '人物':'#5470c6','组织':'#91cc75','地点':'#fac858','概念':'#ee6666','技术':'#73c0de','产品':'#3ba272','事件':'#fc8452','制度':'#9a60b4','指标':'#ea7ccc','流程':'#48b8d0' }
+const COLORS = ['#5470c6','#91cc75','#fac858','#ee6666','#73c0de','#3ba272','#fc8452','#9a60b4','#ea7ccc','#48b8d0','#ff6b6b','#4ecdc4','#45b7d1','#96ceb4','#ffeaa7','#dfe6e9','#fd79a8','#6c5ce7','#00b894','#e17055']
+
+// 动态生成实体类型和颜色映射
+const entityTypes = ref(['概念'])
+const TYPE_COLORS = ref({})
+
+function updateEntityTypes() {
+  const types = new Set()
+  graphData.value.nodes.forEach(n => {
+    if (n.type) types.add(n.type)
+  })
+  entityTypes.value = Array.from(types).sort()
+  // 为每种类型分配颜色
+  const colorMap = {}
+  entityTypes.value.forEach((type, index) => {
+    colorMap[type] = COLORS[index % COLORS.length]
+  })
+  TYPE_COLORS.value = colorMap
+}
 
 const showEntityDialog = ref(false)
 const entityForm = reactive({ name: '', type: '概念', description: '' })
@@ -225,13 +240,12 @@ function getEntityColorFromGraph(name) {
 function buildChartOption(data) {
   const scale = nodeSizeScale.value
   const nodes = data.nodes.map((n, i) => {
-    const typeIdx = TYPE_MAP[n.type] ?? (i % COLORS.length)
+    const color = TYPE_COLORS.value[n.type] || COLORS[i % COLORS.length]
     return {
       id: n.name, name: n.name,
       symbolSize: (30 + Math.min((n.description?.length || 0) / 3, 20)) * scale,
-      itemStyle: { color: COLORS[typeIdx % COLORS.length] },
+      itemStyle: { color },
       label: { show: true, fontSize: 12 },
-      category: typeIdx,
     }
   })
   const edges = data.edges.map(e => ({
@@ -261,6 +275,7 @@ async function loadGraph() {
   try {
     const res = await getGraphOverview()
     graphData.value = res.data || { nodes: [], edges: [] }
+    updateEntityTypes()
     renderChart()
   } catch (e) { ElMessage.error('加载图谱失败') }
 }
@@ -278,6 +293,7 @@ async function handleSearch() {
   try {
     const res = await searchGraph(searchKey.value)
     graphData.value = res.data || { nodes: [], edges: [] }
+    updateEntityTypes()
     filteredNodeCount.value = graphData.value.nodes.length
     filteredEdgeCount.value = graphData.value.edges.length
     renderChart()
@@ -290,6 +306,7 @@ async function handleTypeFilter(type) {
   try {
     const res = await filterByType(type)
     graphData.value = res.data || { nodes: [], edges: [] }
+    updateEntityTypes()
     filteredNodeCount.value = graphData.value.nodes.length
     filteredEdgeCount.value = graphData.value.edges.length
     renderChart()

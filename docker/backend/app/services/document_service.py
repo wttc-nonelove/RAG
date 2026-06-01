@@ -81,20 +81,26 @@ async def parse_document(doc_id: int) -> None:
             chroma_repo.add_batch(ids=ids, embeddings=embeddings, documents=chunks, metadatas=metadatas)
 
             try:
-                # 分段提取知识图谱，每段3000字符，重叠500字符
-                chunk_size = 3000
-                overlap = 500
+                # 从数据库读取提取参数配置
+                from app.dao import config_dao
+                config = await config_dao.get_all(db)
+                config_dict = {c.config_key: c.config_value for c in config}
+                kg_chunk_size = int(config_dict.get("kg_chunk_size", "3000"))
+                kg_overlap = int(config_dict.get("kg_overlap", "500"))
+                kg_min_chars = int(config_dict.get("kg_min_chars", "200"))
+
+                # 分段提取知识图谱
                 all_entities = []
                 all_relations = []
                 start = 0
                 while start < len(text):
-                    end = min(start + chunk_size, len(text))
+                    end = min(start + kg_chunk_size, len(text))
                     chunk = text[start:end]
-                    if len(chunk) >= 200:  # 至少200字符才提取
+                    if len(chunk) >= kg_min_chars:  # 至少指定字符数才提取
                         kg_data = await kg_extract(chunk, doc_id, doc.filename, db=db)
                         all_entities.extend(kg_data.get("entities", []))
                         all_relations.extend(kg_data.get("relations", []))
-                    start += chunk_size - overlap
+                    start += kg_chunk_size - kg_overlap
                     if end >= len(text):
                         break
                 # 去重并存储
@@ -205,12 +211,14 @@ async def delete_document(db: AsyncSession, doc_id: int) -> None:
         return
     try:
         chroma_repo.delete_by_doc_id(doc_id)
-    except Exception:
-        pass
+    except Exception as e:
+        import loguru
+        loguru.logger.warning(f"ChromaDB delete failed for doc {doc_id}: {e}")
     try:
         neo4j_repo.delete_by_doc_id(doc_id)
-    except Exception:
-        pass
+    except Exception as e:
+        import loguru
+        loguru.logger.warning(f"Neo4j delete failed for doc {doc_id}: {e}")
     file_store.delete_file(doc.file_path)
     await document_dao.delete_doc(db, doc_id)
     await db.commit()

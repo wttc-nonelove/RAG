@@ -23,4 +23,11 @@ async def get_by_key(db: AsyncSession, key: str) -> Optional[str]:
 async def update_batch(db: AsyncSession, configs: dict) -> None:
     from app.models.system_config import SystemConfig as SC
     for key, value in configs.items():
-        await db.execute(update(SC).where(SC.config_key == key).values(config_value=str(value)))
+        result = await db.execute(select(SC).where(SC.config_key == key))
+        existing = result.scalar_one_or_none()
+        if existing:
+            await db.execute(update(SC).where(SC.config_key == key).values(config_value=str(value)))
+        else:
+            new_config = SC(config_key=key, config_value=str(value))
+            db.add(new_config)
+    await db.flush()

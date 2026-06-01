@@ -88,12 +88,21 @@ const modelName = ref('deepseek-chat')
 const models = ref([])
 const chatArea = ref(null)
 
-const TYPE_COLORS = { '人物':'#5470c6','组织':'#91cc75','地点':'#fac858','概念':'#ee6666','技术':'#73c0de','产品':'#3ba272','事件':'#fc8452','制度':'#9a60b4','指标':'#ea7ccc','流程':'#48b8d0' }
+const COLORS = ['#5470c6','#91cc75','#fac858','#ee6666','#73c0de','#3ba272','#fc8452','#9a60b4','#ea7ccc','#48b8d0','#ff6b6b','#4ecdc4','#45b7d1','#96ceb4','#ffeaa7','#dfe6e9','#fd79a8','#6c5ce7','#00b894','#e17055']
+const TYPE_COLORS = {}
+
+function getTypeColor(type) {
+  if (!TYPE_COLORS[type]) {
+    const keys = Object.keys(TYPE_COLORS)
+    TYPE_COLORS[type] = COLORS[keys.length % COLORS.length]
+  }
+  return TYPE_COLORS[type]
+}
 
 function getEntityColor(entities, name) {
   if (!entities) return '#909399'
   const entity = entities.find(e => e.name === name)
-  return entity ? (TYPE_COLORS[entity.type] || '#909399') : '#909399'
+  return entity ? getTypeColor(entity.type) : '#909399'
 }
 
 onMounted(async () => {

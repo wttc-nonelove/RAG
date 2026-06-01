@@ -6,7 +6,7 @@ from app.utils.llm_client import llm_client
 EXTRACT_PROMPT = """请从以下文本中提取实体和关系，返回 JSON 格式：
 {{"entities": [{{"name": "实体名", "type": "类型", "description": "描述"}}], "relations": [{{"source": "源实体", "relation": "关系", "target": "目标实体"}}]}}
 
-实体类型包括：人物、组织、地点、概念、技术、产品、事件、制度、指标、流程
+实体类型请根据实体特征自行判断，如：人物、组织、地点、概念、技术、产品、事件、制度、指标、流程、法律、文件、项目、部门、岗位、工具、方法、标准、规范、指标等，也可使用其他更贴切的类型。
 
 文本：
 {text}

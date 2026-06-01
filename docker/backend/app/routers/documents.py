@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
+from pydantic import BaseModel
 from typing import Optional
 
 from app.database import get_db
@@ -117,3 +118,45 @@ async def reparse_all_documents(background_tasks: BackgroundTasks, user: User = 
     for doc_id in docs:
         background_tasks.add_task(document_service.parse_document, doc_id)
     return ok({"count": len(docs)}, f"已触发 {len(docs)} 个文档的重新解析")
+
+
+@router.post("/delete-all")
+async def delete_all_documents(user: User = Depends(require_admin), db: AsyncSession = Depends(get_db)):
+    docs = await document_dao.get_all_ids(db)
+    if not docs:
+        return ok({"count": 0}, "没有需要删除的文档")
+    count = 0
+    for doc_id in docs:
+        try:
+            await document_service.delete_document(db, doc_id)
+            count += 1
+        except Exception:
+            pass
+    return ok({"count": count}, f"已删除 {count} 个文档")
+
+
+class BatchRequest(BaseModel):
+    ids: list[int]
+
+
+@router.post("/batch-delete")
+async def batch_delete_documents(req: BatchRequest, user: User = Depends(require_admin), db: AsyncSession = Depends(get_db)):
+    if not req.ids:
+        return ok({"count": 0}, "没有选择文档")
+    count = 0
+    for doc_id in req.ids:
+        try:
+            await document_service.delete_document(db, doc_id)
+            count += 1
+        except Exception:
+            pass
+    return ok({"count": count}, f"已删除 {count} 个文档")
+
+
+@router.post("/batch-reparse")
+async def batch_reparse_documents(req: BatchRequest, background_tasks: BackgroundTasks, user: User = Depends(require_admin), db: AsyncSession = Depends(get_db)):
+    if not req.ids:
+        return ok({"count": 0}, "没有选择文档")
+    for doc_id in req.ids:
+        background_tasks.add_task(document_service.parse_document, doc_id)
+    return ok({"count": len(req.ids)}, f"已触发 {len(req.ids)} 个文档的重新解析")

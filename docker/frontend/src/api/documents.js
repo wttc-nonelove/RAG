@@ -9,3 +9,6 @@ export const updateDocument = (id, formData) => client.post(`/documents/${id}/up
 export const deleteDocument = (id) => client.delete(`/documents/${id}`)
 export const reparseDocument = (id) => client.post(`/documents/${id}/reparse`)
 export const reparseAllDocuments = () => client.post('/documents/reparse-all')
+export const deleteAllDocuments = () => client.post('/documents/delete-all')
+export const batchDeleteDocuments = (ids) => client.post('/documents/batch-delete', { ids })
+export const batchReparseDocuments = (ids) => client.post('/documents/batch-reparse', { ids })
