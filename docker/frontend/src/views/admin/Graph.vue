@@ -6,11 +6,11 @@
       <p style="color:rgba(255,255,255,0.8);margin:6px 0 0;font-size:13px">可视化实体关系网络，支持搜索、筛选和编辑</p>
     </div>
 
-    <el-row :gutter="20">
+    <el-row :gutter="focusMode ? 0 : 20">
       <!-- 左侧：图谱 -->
-      <el-col :span="showRelationPanel ? 18 : 24">
-        <div class="panel">
-          <div class="panel-header">
+      <el-col :span="focusMode ? 24 : (showRelationPanel ? 18 : 24)">
+        <div class="panel" style="position:relative">
+          <div class="panel-header" v-show="!focusMode">
             <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
               <el-input v-model="searchKey" placeholder="搜索实体" style="width:180px" clearable @keyup.enter="handleSearch" />
               <el-button type="primary" @click="handleSearch">
@@ -24,8 +24,8 @@
               <el-button :type="showRelationPanel ? 'primary' : 'info'" @click="showRelationPanel = !showRelationPanel">
                 {{ showRelationPanel ? '隐藏关系' : '关系列表' }}
               </el-button>
-              <el-button @click="toggleFullscreen">
-                <el-icon style="margin-right:4px"><FullScreen /></el-icon>{{ isFullscreen ? '退出全屏' : '全屏查看' }}
+              <el-button :type="focusMode ? 'primary' : 'default'" @click="toggleFocusMode">
+                <el-icon style="margin-right:4px"><FullScreen /></el-icon>{{ focusMode ? '退出专注' : '专注视图' }}
               </el-button>
             </div>
             <div class="graph-stats">
@@ -34,8 +34,21 @@
             </div>
           </div>
 
+          <!-- 专注模式浮动控制条 -->
+          <div v-if="focusMode" class="focus-controls">
+            <div style="display:flex;align-items:center;gap:12px">
+              <el-input v-model="searchKey" placeholder="搜索" style="width:140px" size="small" clearable @keyup.enter="handleSearch" />
+              <el-button size="small" @click="handleSearch">搜索</el-button>
+              <el-button size="small" @click="loadGraph">全部</el-button>
+              <span style="font-size:12px;color:#909399">节点:{{ graphData.nodes.length }} 关系:{{ graphData.edges.length }}</span>
+            </div>
+            <el-button size="small" type="primary" @click="toggleFocusMode">
+              <el-icon style="margin-right:4px"><FullScreen /></el-icon>退出专注
+            </el-button>
+          </div>
+
           <!-- 类型筛选标签 -->
-          <div class="type-filter-bar">
+          <div class="type-filter-bar" v-show="!focusMode">
             <el-tag :type="activeType === '' ? 'primary' : 'info'" size="small" style="cursor:pointer" effect="dark" round @click="clearTypeFilter">全部</el-tag>
             <el-tag v-for="(color, type) in TYPE_COLORS" :key="type" :color="color"
               :style="{cursor:'pointer',opacity:activeType===type?1:0.5,border:activeType===type?'2px solid #303133':'none'}"
@@ -46,13 +59,13 @@
           </div>
 
           <!-- 图表控制 -->
-          <div class="chart-controls">
+          <div class="chart-controls" v-show="!focusMode">
             <span style="font-size:12px;color:#909399">节点大小:</span>
             <el-slider v-model="nodeSizeScale" :min="0.5" :max="2" :step="0.1" style="width:120px" @change="renderChart" />
             <el-switch v-model="showEdgeLabels" active-text="关系标签" inactive-text="" @change="renderChart" />
           </div>
 
-          <div ref="chartRef" style="width:100%;height:calc(100vh - 420px)"></div>
+          <div ref="chartRef" :style="{width:'100%',height: focusMode ? 'calc(100vh - 180px)' : 'calc(100vh - 420px)'}"></div>
         </div>
       </el-col>
 
@@ -215,20 +228,14 @@ const nodeSizeScale = ref(1)
 const showEdgeLabels = ref(true)
 const showRelationPanel = ref(false)
 const highlightedRelation = ref(-1)
-const isFullscreen = ref(false)
+const focusMode = ref(false)
 let chart = null
 let resizeHandler = null
 
-function toggleFullscreen() {
-  const el = document.documentElement
-  if (!isFullscreen.value) {
-    if (el.requestFullscreen) el.requestFullscreen()
-    else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen()
-    isFullscreen.value = true
-  } else {
-    if (document.exitFullscreen) document.exitFullscreen()
-    else if (document.webkitExitFullscreen) document.webkitExitFullscreen()
-    isFullscreen.value = false
+function toggleFocusMode() {
+  focusMode.value = !focusMode.value
+  if (focusMode.value) {
+    showRelationPanel.value = false
   }
   setTimeout(() => { chart?.resize() }, 300)
 }
@@ -559,5 +566,21 @@ onBeforeUnmount(() => {
 }
 .neighbor-item:hover {
   background: #f5f7fa;
+}
+
+.focus-controls {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  right: 12px;
+  z-index: 10;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: rgba(255,255,255,0.9);
+  backdrop-filter: blur(10px);
+  border-radius: 10px;
+  padding: 10px 16px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
 }
 </style>

@@ -81,18 +81,27 @@
           <Fold v-if="!isCollapse" />
           <Expand v-else />
         </el-icon>
-        <el-dropdown @command="handleCommand">
-          <span style="cursor:pointer">
-            {{ auth.user?.username }}
-            <el-icon><ArrowDown /></el-icon>
-          </span>
-          <template #dropdown>
-            <el-dropdown-menu>
-              <el-dropdown-item command="profile">个人中心</el-dropdown-item>
-              <el-dropdown-item command="logout" divided>退出登录</el-dropdown-item>
-            </el-dropdown-menu>
-          </template>
-        </el-dropdown>
+        <div style="display:flex;align-items:center;gap:16px">
+          <el-tooltip content="全屏" placement="bottom">
+            <el-icon style="cursor:pointer;font-size:18px;color:#909399" @click="toggleFullscreen"><FullScreen /></el-icon>
+          </el-tooltip>
+          <el-dropdown @command="handleCommand">
+            <div style="display:flex;align-items:center;gap:10px;cursor:pointer">
+              <div class="header-avatar">
+                <span v-if="!avatarUrl">{{ (auth.user?.username||'?')[0].toUpperCase() }}</span>
+                <img v-else :src="avatarUrl" style="width:100%;height:100%;object-fit:cover;border-radius:50%" />
+              </div>
+              <span style="font-size:14px;font-weight:500">{{ auth.user?.username }}</span>
+              <el-icon><ArrowDown /></el-icon>
+            </div>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item command="profile">个人中心</el-dropdown-item>
+                <el-dropdown-item command="logout" divided>退出登录</el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
+        </div>
       </el-header>
 
       <el-main style="background:#f0f2f5;padding:20px">
@@ -108,12 +117,24 @@ import { useRouter } from 'vue-router'
 import { useAuthStore } from '../../stores/auth'
 import {
   Monitor, Document, Share, User, Clock, Setting, Tools,
-  ChatDotRound, Fold, Expand, ArrowDown
+  ChatDotRound, Fold, Expand, ArrowDown, FullScreen
 } from '@element-plus/icons-vue'
 
 const router = useRouter()
 const auth = useAuthStore()
 const isCollapse = ref(false)
+const avatarUrl = ref(localStorage.getItem('avatar_' + auth.user?.id) || '')
+
+function toggleFullscreen() {
+  const el = document.documentElement
+  if (!document.fullscreenElement) {
+    if (el.requestFullscreen) el.requestFullscreen()
+    else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen()
+  } else {
+    if (document.exitFullscreen) document.exitFullscreen()
+    else if (document.webkitExitFullscreen) document.webkitExitFullscreen()
+  }
+}
 
 function handleCommand(cmd) {
   if (cmd === 'logout') {
@@ -166,5 +187,19 @@ function handleCommand(cmd) {
   color: #ffffff60;
   text-transform: uppercase;
   letter-spacing: 1px;
+}
+.header-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #667eea, #764ba2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 600;
+  color: #fff;
+  overflow: hidden;
+  flex-shrink: 0;
 }
 </style>
