@@ -1,61 +1,74 @@
 <template>
   <div>
-    <h2>知识图谱</h2>
-    <el-row :gutter="20" style="margin-top:20px">
+    <!-- 页面标题区域 -->
+    <div style="background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);border-radius:12px;padding:24px 28px;margin-bottom:20px">
+      <h2 style="color:#fff;margin:0;font-size:22px;font-weight:600">知识图谱</h2>
+      <p style="color:rgba(255,255,255,0.8);margin:6px 0 0;font-size:13px">可视化实体关系网络，支持搜索、筛选和编辑</p>
+    </div>
+
+    <el-row :gutter="20">
       <!-- 左侧：图谱 -->
       <el-col :span="showRelationPanel ? 18 : 24">
-        <el-card>
-          <template #header>
-            <div style="display:flex;justify-content:space-between;align-items:center">
-              <div style="display:flex;gap:12px;align-items:center">
-                <el-input v-model="searchKey" placeholder="搜索实体" style="width:200px" clearable @keyup.enter="handleSearch" />
-                <el-button type="primary" @click="handleSearch">搜索</el-button>
-                <el-button @click="loadGraph">全部</el-button>
-                <el-button type="success" @click="showEntityDialog=true">添加实体</el-button>
-                <el-button type="warning" @click="openRelationDialog">添加关系</el-button>
-                <el-button :type="showRelationPanel ? 'primary' : 'info'" @click="showRelationPanel = !showRelationPanel">
-                  {{ showRelationPanel ? '隐藏关系' : '关系列表' }}
-                </el-button>
-              </div>
-              <span style="color:#909399;font-size:13px">节点: {{ graphData.nodes.length }} | 关系: {{ graphData.edges.length }}</span>
+        <div class="panel">
+          <div class="panel-header">
+            <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+              <el-input v-model="searchKey" placeholder="搜索实体" style="width:180px" clearable @keyup.enter="handleSearch" />
+              <el-button type="primary" @click="handleSearch">
+                <el-icon style="margin-right:4px"><Position /></el-icon>搜索
+              </el-button>
+              <el-button @click="loadGraph">全部</el-button>
+              <el-button type="success" @click="showEntityDialog=true">
+                <el-icon style="margin-right:4px"><Plus /></el-icon>添加实体
+              </el-button>
+              <el-button type="warning" @click="openRelationDialog">添加关系</el-button>
+              <el-button :type="showRelationPanel ? 'primary' : 'info'" @click="showRelationPanel = !showRelationPanel">
+                {{ showRelationPanel ? '隐藏关系' : '关系列表' }}
+              </el-button>
             </div>
-          </template>
-          <div style="margin-bottom:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-            <el-tag :type="activeType === '' ? 'primary' : 'info'" size="small" style="cursor:pointer" @click="clearTypeFilter">全部</el-tag>
+            <div class="graph-stats">
+              <span>节点: <b>{{ graphData.nodes.length }}</b></span>
+              <span>关系: <b>{{ graphData.edges.length }}</b></span>
+            </div>
+          </div>
+
+          <!-- 类型筛选标签 -->
+          <div class="type-filter-bar">
+            <el-tag :type="activeType === '' ? 'primary' : 'info'" size="small" style="cursor:pointer" effect="dark" round @click="clearTypeFilter">全部</el-tag>
             <el-tag v-for="(color, type) in TYPE_COLORS" :key="type" :color="color"
-              :style="{marginRight:'0',color:'#fff',fontSize:'12px',cursor:'pointer',opacity:activeType===type?1:0.6,border:activeType===type?'2px solid #303133':'none'}"
-              size="small" @click="handleTypeFilter(type)">{{ type }}</el-tag>
+              :style="{cursor:'pointer',opacity:activeType===type?1:0.5,border:activeType===type?'2px solid #303133':'none'}"
+              style="color:#fff" size="small" effect="dark" round @click="handleTypeFilter(type)">{{ type }}</el-tag>
             <span v-if="activeType" style="font-size:12px;color:#909399;margin-left:8px">
               筛选: {{ activeType }} | 节点: {{ filteredNodeCount }} | 关系: {{ filteredEdgeCount }}
             </span>
           </div>
-          <div style="margin-bottom:8px;display:flex;align-items:center;gap:16px">
+
+          <!-- 图表控制 -->
+          <div class="chart-controls">
             <span style="font-size:12px;color:#909399">节点大小:</span>
             <el-slider v-model="nodeSizeScale" :min="0.5" :max="2" :step="0.1" style="width:120px" @change="renderChart" />
             <el-switch v-model="showEdgeLabels" active-text="关系标签" inactive-text="" @change="renderChart" />
           </div>
-          <div ref="chartRef" style="width:100%;height:calc(100vh - 400px)"></div>
-        </el-card>
+
+          <div ref="chartRef" style="width:100%;height:calc(100vh - 420px)"></div>
+        </div>
       </el-col>
 
       <!-- 右侧：关系列表面板 -->
       <el-col :span="6" v-if="showRelationPanel">
-        <el-card style="height:100%">
-          <template #header>
-            <div style="display:flex;justify-content:space-between;align-items:center">
-              <span style="font-weight:bold">关系列表</span>
-              <el-button size="small" @click="loadRelations">刷新</el-button>
-            </div>
-          </template>
-          <div style="max-height:calc(100vh - 480px);overflow-y:auto">
+        <div class="panel" style="height:100%">
+          <div class="panel-header">
+            <span style="font-weight:600;font-size:15px">关系列表</span>
+            <el-button size="small" @click="loadRelations" :icon="Refresh">刷新</el-button>
+          </div>
+          <div class="relation-list">
             <div v-for="(rel, idx) in relations" :key="idx"
-              style="padding:8px 0;border-bottom:1px solid #f0f0f0;font-size:12px;cursor:pointer"
-              :style="{background: highlightedRelation === idx ? '#ecf5ff' : ''}"
+              class="relation-item"
+              :class="{ active: highlightedRelation === idx }"
               @click="highlightRelation(idx, rel)">
-              <div style="display:flex;align-items:center;gap:4px">
-                <el-tag size="small" :color="getEntityColorFromGraph(rel.source)" style="color:#fff;border:none;font-size:11px">{{ rel.source }}</el-tag>
-                <span style="color:#909399">—[{{ rel.rel }}]→</span>
-                <el-tag size="small" :color="getEntityColorFromGraph(rel.target)" style="color:#fff;border:none;font-size:11px">{{ rel.target }}</el-tag>
+              <div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap">
+                <el-tag size="small" :color="getEntityColorFromGraph(rel.source)" style="color:#fff;border:none;font-size:11px" round>{{ rel.source }}</el-tag>
+                <span style="color:#909399;font-size:11px">—[{{ rel.rel }}]→</span>
+                <el-tag size="small" :color="getEntityColorFromGraph(rel.target)" style="color:#fff;border:none;font-size:11px" round>{{ rel.target }}</el-tag>
               </div>
               <div style="text-align:right;margin-top:4px">
                 <el-popconfirm title="确定删除该关系？" @confirm="handleDeleteRelation(rel)">
@@ -67,7 +80,7 @@
             </div>
             <el-empty v-if="relations.length === 0" description="暂无关系" :image-size="60" />
           </div>
-        </el-card>
+        </div>
       </el-col>
     </el-row>
 
@@ -75,7 +88,7 @@
     <el-dialog v-model="showEntityDialog" title="添加实体" width="400">
       <el-form :model="entityForm" label-width="80px">
         <el-form-item label="名称">
-          <el-input v-model="entityForm.name" />
+          <el-input v-model="entityForm.name" placeholder="输入实体名称" />
         </el-form-item>
         <el-form-item label="类型">
           <el-select v-model="entityForm.type" filterable allow-create style="width:100%">
@@ -83,7 +96,7 @@
           </el-select>
         </el-form-item>
         <el-form-item label="描述">
-          <el-input v-model="entityForm.description" type="textarea" :rows="2" />
+          <el-input v-model="entityForm.description" type="textarea" :rows="2" placeholder="输入实体描述" />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -118,28 +131,32 @@
     <!-- 实体详情对话框 -->
     <el-dialog v-model="showNodeDetail" title="实体详情" width="500">
       <div v-if="selectedNode">
-        <el-descriptions :column="1" border>
-          <el-descriptions-item label="名称">{{ selectedNode.name }}</el-descriptions-item>
-          <el-descriptions-item label="类型">
-            <el-tag :color="TYPE_COLORS[selectedNode.type] || '#909399'" style="color:#fff;border:none">{{ selectedNode.type }}</el-tag>
-          </el-descriptions-item>
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px;padding:16px;background:#f5f7fa;border-radius:10px">
+          <div style="width:48px;height:48px;border-radius:12px;display:flex;align-items:center;justify-content:center" :style="{background: TYPE_COLORS[selectedNode.type] || '#909399'} + '20'">
+            <el-icon :size="24" :color="TYPE_COLORS[selectedNode.type] || '#909399'"><Share /></el-icon>
+          </div>
+          <div>
+            <div style="font-size:18px;font-weight:600;color:#303133">{{ selectedNode.name }}</div>
+            <el-tag :color="TYPE_COLORS[selectedNode.type] || '#909399'" style="color:#fff;border:none;margin-top:4px" size="small" round>{{ selectedNode.type }}</el-tag>
+          </div>
+        </div>
+
+        <el-descriptions :column="1" border style="margin-bottom:16px">
           <el-descriptions-item label="来源文档">{{ selectedNode.doc_name || '未知' }}</el-descriptions-item>
           <el-descriptions-item label="描述">{{ selectedNode.description || '暂无描述' }}</el-descriptions-item>
         </el-descriptions>
 
-        <div style="margin-top:16px">
-          <div style="font-weight:bold;margin-bottom:8px">关联实体 ({{ nodeNeighbors.length }})</div>
-          <div style="max-height:200px;overflow-y:auto">
-            <div v-for="(n, idx) in nodeNeighbors" :key="idx" style="padding:6px 0;border-bottom:1px solid #f0f0f0;font-size:12px">
-              <div style="display:flex;align-items:center;gap:4px">
-                <span v-if="n.direction === 'out'" style="color:#909399">→</span>
-                <el-tag size="small" :color="TYPE_COLORS[n.type] || '#909399'" style="color:#fff;border:none;font-size:11px">{{ n.name }}</el-tag>
-                <span v-if="n.direction === 'in'" style="color:#909399">→</span>
-                <span style="color:#909399;margin-left:4px">[{{ n.rel }}]</span>
-              </div>
+        <div style="font-weight:600;margin-bottom:8px;color:#303133">关联实体 ({{ nodeNeighbors.length }})</div>
+        <div class="neighbor-list">
+          <div v-for="(n, idx) in nodeNeighbors" :key="idx" class="neighbor-item">
+            <div style="display:flex;align-items:center;gap:6px">
+              <span v-if="n.direction === 'out'" style="color:#909399;font-size:11px">→</span>
+              <el-tag size="small" :color="TYPE_COLORS[n.type] || '#909399'" style="color:#fff;border:none;font-size:11px" round>{{ n.name }}</el-tag>
+              <span v-if="n.direction === 'in'" style="color:#909399;font-size:11px">→</span>
+              <span style="color:#909399;font-size:11px;margin-left:4px">[{{ n.rel }}]</span>
             </div>
-            <el-empty v-if="nodeNeighbors.length === 0" description="暂无关联实体" :image-size="40" />
           </div>
+          <el-empty v-if="nodeNeighbors.length === 0" description="暂无关联实体" :image-size="40" />
         </div>
 
         <div style="margin-top:16px;display:flex;gap:12px">
@@ -180,6 +197,7 @@
 import { ref, reactive, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import * as echarts from 'echarts'
 import { ElMessage } from 'element-plus'
+import { Position, Plus, Share, Refresh } from '@element-plus/icons-vue'
 import {
   getGraphOverview, searchGraph, filterByType, createEntity, updateEntity,
   deleteEntity, getEntityNeighbors, getRelations, createRelation, deleteRelation
@@ -212,7 +230,6 @@ function updateEntityTypes() {
     if (n.type) types.add(n.type)
   })
   entityTypes.value = Array.from(types).sort()
-  // 为每种类型分配颜色
   const colorMap = {}
   entityTypes.value.forEach((type, index) => {
     colorMap[type] = COLORS[index % COLORS.length]
@@ -234,7 +251,7 @@ const editEntityForm = reactive({ name: '', type: '概念', description: '' })
 
 function getEntityColorFromGraph(name) {
   const node = graphData.value.nodes.find(n => n.name === name)
-  return node ? (TYPE_COLORS[node.type] || '#909399') : '#909399'
+  return node ? (TYPE_COLORS.value[node.type] || '#909399') : '#909399'
 }
 
 function buildChartOption(data) {
@@ -244,7 +261,7 @@ function buildChartOption(data) {
     return {
       id: n.name, name: n.name,
       symbolSize: (30 + Math.min((n.description?.length || 0) / 3, 20)) * scale,
-      itemStyle: { color },
+      itemStyle: { color, borderColor: '#fff', borderWidth: 2 },
       label: { show: true, fontSize: 12 },
     }
   })
@@ -255,6 +272,9 @@ function buildChartOption(data) {
   return {
     tooltip: {
       trigger: 'item',
+      backgroundColor: 'rgba(255,255,255,0.95)',
+      borderColor: '#e8e8e8',
+      textStyle: { color: '#303133' },
       formatter: (p) => p.dataType === 'node' ? p.name : `${p.data.source} —[${p.data.label?.formatter||''}]→ ${p.data.target}`
     },
     series: [{
@@ -322,7 +342,6 @@ function clearTypeFilter() {
 
 function highlightRelation(idx, rel) {
   highlightedRelation.value = idx
-  // 高亮图谱中对应的边
   if (chart) {
     chart.dispatchAction({ type: 'highlight', seriesIndex: 0, dataType: 'edge', name: `${rel.source} > ${rel.target}` })
     setTimeout(() => {
@@ -382,7 +401,6 @@ async function handleNodeClick(nodeName) {
   editEntityForm.type = node.type || '概念'
   editEntityForm.description = node.description || ''
   showNodeDetail.value = true
-  // 获取来源文档名称
   if (node.doc_id) {
     try {
       const { getDocument } = await import('../../api/documents')
@@ -444,3 +462,84 @@ onBeforeUnmount(() => {
   chart?.dispose()
 })
 </script>
+
+<style scoped>
+.panel {
+  background: #fff;
+  border-radius: 10px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+  border: 1px solid #f0f0f0;
+  overflow: hidden;
+}
+.panel-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid #f0f0f0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.graph-stats {
+  display: flex;
+  gap: 16px;
+  font-size: 13px;
+  color: #909399;
+}
+.graph-stats b {
+  color: #303133;
+  font-weight: 600;
+}
+
+.type-filter-bar {
+  padding: 12px 20px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  border-bottom: 1px solid #f5f5f5;
+}
+
+.chart-controls {
+  padding: 8px 20px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  border-bottom: 1px solid #f5f5f5;
+}
+
+.relation-list {
+  max-height: calc(100vh - 480px);
+  overflow-y: auto;
+}
+.relation-item {
+  padding: 10px 16px;
+  border-bottom: 1px solid #f5f5f5;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.relation-item:hover {
+  background: #fafafa;
+}
+.relation-item.active {
+  background: #ecf5ff;
+}
+
+.neighbor-list {
+  max-height: 200px;
+  overflow-y: auto;
+  border: 1px solid #f0f0f0;
+  border-radius: 8px;
+  padding: 4px;
+}
+.neighbor-item {
+  padding: 8px 10px;
+  border-radius: 6px;
+  transition: background 0.15s;
+}
+.neighbor-item:hover {
+  background: #f5f7fa;
+}
+</style>
