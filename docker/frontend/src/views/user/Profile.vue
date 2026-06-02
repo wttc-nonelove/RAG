@@ -8,12 +8,38 @@
     <el-row :gutter="20" style="margin-top:20px">
       <el-col :span="8">
         <div class="clay-card" style="text-align:center;padding:32px 24px">
-          <div style="width:80px;height:80px;border-radius:20px;background:linear-gradient(135deg,#667eea,#764ba2);display:flex;align-items:center;justify-content:center;margin:0 auto 16px;font-size:32px;font-weight:700;color:#fff;border:3px solid rgba(255,255,255,0.3);box-shadow:0 6px 0 rgba(0,0,0,0.1)">{{ (auth.user?.username||'?')[0].toUpperCase() }}</div>
-          <div style="font-size:20px;font-weight:700;color:#1a1a2e;margin-bottom:8px">{{ auth.user?.username }}</div>
+          <!-- 头像 -->
+          <div style="position:relative;display:inline-block;margin-bottom:16px">
+            <div class="avatar-wrapper">
+              <span v-if="!avatarUrl">{{ (auth.user?.username||'?')[0].toUpperCase() }}</span>
+              <img v-else :src="avatarUrl" style="width:100%;height:100%;object-fit:cover;border-radius:20px" />
+            </div>
+            <div class="avatar-upload" @click="triggerAvatarUpload">
+              <el-icon :size="16" color="#fff"><UploadFilled /></el-icon>
+            </div>
+            <input ref="avatarInput" type="file" accept="image/*" style="display:none" @change="handleAvatarUpload" />
+          </div>
+          <!-- 用户名 -->
+          <div style="display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:8px">
+            <div v-if="!editingUsername" style="font-size:20px;font-weight:700;color:#1a1a2e">{{ auth.user?.username }}</div>
+            <el-input v-else v-model="newUsername" size="small" style="width:150px" @keyup.enter="saveUsername" @keyup.escape="editingUsername = false" />
+            <el-icon v-if="!editingUsername" style="cursor:pointer;color:#909399" @click="startEditUsername"><Edit /></el-icon>
+            <template v-else>
+              <el-icon style="cursor:pointer;color:#10b981" @click="saveUsername"><Check /></el-icon>
+              <el-icon style="cursor:pointer;color:#ef4444" @click="editingUsername = false"><Close /></el-icon>
+            </template>
+          </div>
           <el-tag :type="auth.user?.role==='admin'?'danger':'primary'" effect="dark" round>{{ auth.user?.role==='admin'?'管理员':'普通用户' }}</el-tag>
+          <!-- 统计 -->
           <div style="display:flex;gap:24px;justify-content:center;margin-top:24px;padding-top:24px;border-top:2px solid #f0f0f0">
-            <div style="text-align:center"><div style="font-size:24px;font-weight:700;color:#1a1a2e">-</div><div style="font-size:12px;color:#909399;margin-top:4px">问答次数</div></div>
-            <div style="text-align:center"><div style="font-size:24px;font-weight:700;color:#1a1a2e">-</div><div style="font-size:12px;color:#909399;margin-top:4px">文档数量</div></div>
+            <div style="text-align:center">
+              <div style="font-size:24px;font-weight:700;color:#667eea">{{ userStats.qa_count }}</div>
+              <div style="font-size:12px;color:#909399;margin-top:4px">问答次数</div>
+            </div>
+            <div style="text-align:center">
+              <div style="font-size:24px;font-weight:700;color:#10b981">{{ userStats.doc_count }}</div>
+              <div style="font-size:12px;color:#909399;margin-top:4px">文档数量</div>
+            </div>
           </div>
         </div>
       </el-col>
@@ -41,14 +67,70 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Lock } from '@element-plus/icons-vue'
+import { Lock, Edit, Check, Close, UploadFilled } from '@element-plus/icons-vue'
 import { useAuthStore } from '../../stores/auth'
 import { changePassword } from '../../api/auth'
+import client from '../../api/client'
 
 const auth = useAuthStore()
 const form = ref({ old_password: '', new_password: '' })
+const userStats = reactive({ qa_count: 0, doc_count: 0 })
+
+// 用户名编辑
+const editingUsername = ref(false)
+const newUsername = ref('')
+
+// 头像
+const avatarUrl = ref(localStorage.getItem('avatar_' + auth.user?.id) || '')
+const avatarInput = ref(null)
+
+onMounted(async () => {
+  // 加载用户统计
+  try {
+    const res = await client.get('/auth/stats')
+    userStats.qa_count = res.data.qa_count || 0
+    userStats.doc_count = res.data.doc_count || 0
+  } catch {}
+})
+
+function startEditUsername() {
+  newUsername.value = auth.user?.username || ''
+  editingUsername.value = true
+}
+
+async function saveUsername() {
+  if (!newUsername.value.trim()) return ElMessage.warning('用户名不能为空')
+  if (newUsername.value === auth.user?.username) { editingUsername.value = false; return }
+  try {
+    const res = await client.put('/auth/username', { username: newUsername.value })
+    auth.user.username = res.data.username
+    localStorage.setItem('user', JSON.stringify(auth.user))
+    editingUsername.value = false
+    ElMessage.success('用户名修改成功')
+  } catch (e) {
+    ElMessage.error(e.response?.data?.detail || '修改失败')
+  }
+}
+
+function triggerAvatarUpload() {
+  avatarInput.value?.click()
+}
+
+function handleAvatarUpload(event) {
+  const file = event.target.files[0]
+  if (!file) return
+  if (file.size > 2 * 1024 * 1024) return ElMessage.error('头像大小不能超过 2MB')
+  const reader = new FileReader()
+  reader.onload = (e) => {
+    avatarUrl.value = e.target.result
+    localStorage.setItem('avatar_' + auth.user?.id, e.target.result)
+    ElMessage.success('头像更新成功')
+  }
+  reader.readAsDataURL(file)
+  event.target.value = ''
+}
 
 async function handleChangePassword() {
   if (!form.value.old_password || !form.value.new_password) return ElMessage.warning('请填写完整')
@@ -56,3 +138,24 @@ async function handleChangePassword() {
   try { await changePassword(form.value); ElMessage.success('密码修改成功'); form.value = { old_password: '', new_password: '' } } catch (e) { ElMessage.error(e.response?.data?.detail || '修改失败') }
 }
 </script>
+
+<style scoped>
+.avatar-wrapper {
+  width: 80px; height: 80px; border-radius: 20px;
+  background: linear-gradient(135deg, #667eea, #764ba2);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 32px; font-weight: 700; color: #fff;
+  border: 3px solid rgba(255,255,255,0.3);
+  box-shadow: 0 6px 0 rgba(0,0,0,0.1);
+  overflow: hidden;
+}
+.avatar-upload {
+  position: absolute; bottom: -4px; right: -4px;
+  width: 28px; height: 28px; border-radius: 8px;
+  background: #667eea; display: flex; align-items: center; justify-content: center;
+  cursor: pointer; border: 2px solid #fff;
+  box-shadow: 0 2px 0 rgba(0,0,0,0.1);
+  transition: all 0.2s;
+}
+.avatar-upload:hover { transform: scale(1.1); background: #764ba2; }
+</style>

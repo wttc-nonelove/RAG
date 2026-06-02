@@ -16,6 +16,9 @@
         <el-form-item prop="password">
           <el-input v-model="form.password" type="password" placeholder="请输入密码" size="large" prefix-icon="Lock" show-password />
         </el-form-item>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px">
+          <el-checkbox v-model="rememberMe">记住密码</el-checkbox>
+        </div>
         <el-form-item>
           <el-button type="primary" size="large" class="login-btn" :loading="loading" native-type="submit">
             登 录
@@ -51,7 +54,7 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { ChatDotRound } from '@element-plus/icons-vue'
@@ -65,6 +68,7 @@ const regFormRef = ref()
 const loading = ref(false)
 const regLoading = ref(false)
 const showRegister = ref(false)
+const rememberMe = ref(false)
 const form = ref({ username: '', password: '' })
 const regForm = ref({ username: '', password: '' })
 
@@ -77,12 +81,31 @@ const regRules = {
   password: [{ required: true, min: 6, message: '密码至少6位', trigger: 'blur' }],
 }
 
+// 页面加载时读取保存的账号密码
+onMounted(() => {
+  const savedUsername = localStorage.getItem('remembered_username')
+  const savedPassword = localStorage.getItem('remembered_password')
+  if (savedUsername && savedPassword) {
+    form.value.username = savedUsername
+    form.value.password = savedPassword
+    rememberMe.value = true
+  }
+})
+
 async function handleLogin() {
   await formRef.value.validate()
   loading.value = true
   try {
     const res = await login(form.value)
     auth.setAuth(res.data.access_token, res.data.user)
+    // 记住密码
+    if (rememberMe.value) {
+      localStorage.setItem('remembered_username', form.value.username)
+      localStorage.setItem('remembered_password', form.value.password)
+    } else {
+      localStorage.removeItem('remembered_username')
+      localStorage.removeItem('remembered_password')
+    }
     ElMessage.success('登录成功')
     router.push(res.data.user.role === 'admin' ? '/dashboard' : '/qa')
   } catch (e) {

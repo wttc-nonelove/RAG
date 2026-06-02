@@ -24,6 +24,9 @@
               <el-button :type="showRelationPanel ? 'primary' : 'info'" @click="showRelationPanel = !showRelationPanel">
                 {{ showRelationPanel ? '隐藏关系' : '关系列表' }}
               </el-button>
+              <el-button @click="toggleFullscreen">
+                <el-icon style="margin-right:4px"><FullScreen /></el-icon>{{ isFullscreen ? '退出全屏' : '全屏查看' }}
+              </el-button>
             </div>
             <div class="graph-stats">
               <span>节点: <b>{{ graphData.nodes.length }}</b></span>
@@ -197,7 +200,7 @@
 import { ref, reactive, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import * as echarts from 'echarts'
 import { ElMessage } from 'element-plus'
-import { Position, Plus, Share, Refresh } from '@element-plus/icons-vue'
+import { Position, Plus, Share, Refresh, FullScreen } from '@element-plus/icons-vue'
 import {
   getGraphOverview, searchGraph, filterByType, createEntity, updateEntity,
   deleteEntity, getEntityNeighbors, getRelations, createRelation, deleteRelation
@@ -212,8 +215,23 @@ const nodeSizeScale = ref(1)
 const showEdgeLabels = ref(true)
 const showRelationPanel = ref(false)
 const highlightedRelation = ref(-1)
+const isFullscreen = ref(false)
 let chart = null
 let resizeHandler = null
+
+function toggleFullscreen() {
+  const el = document.documentElement
+  if (!isFullscreen.value) {
+    if (el.requestFullscreen) el.requestFullscreen()
+    else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen()
+    isFullscreen.value = true
+  } else {
+    if (document.exitFullscreen) document.exitFullscreen()
+    else if (document.webkitExitFullscreen) document.webkitExitFullscreen()
+    isFullscreen.value = false
+  }
+  setTimeout(() => { chart?.resize() }, 300)
+}
 
 const graphData = ref({ nodes: [], edges: [] })
 const relations = ref([])

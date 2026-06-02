@@ -2,8 +2,13 @@
   <el-container style="height: 100vh">
     <el-aside :width="isCollapse ? '64px' : '220px'" style="background:#001529;transition:width 0.3s">
       <div class="logo" :style="{ padding: isCollapse ? '16px 8px' : '16px 20px' }">
-        <span v-if="!isCollapse" style="color:#fff;font-size:16px;font-weight:bold">RAG 智能问答</span>
-        <span v-else style="color:#fff;font-size:18px">R</span>
+        <div class="logo-icon">
+          <el-icon :size="isCollapse ? 20 : 24" color="#fff"><ChatDotRound /></el-icon>
+        </div>
+        <div v-if="!isCollapse" class="logo-text">
+          <div class="logo-title">RAG</div>
+          <div class="logo-subtitle">智能问答系统</div>
+        </div>
       </div>
       <el-menu
         :default-active="$route.path"
@@ -126,6 +131,34 @@ function handleCommand(cmd) {
   display: flex;
   align-items: center;
   justify-content: center;
+  gap: 12px;
+}
+.logo-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-shadow: 0 4px 0 rgba(0,0,0,0.2);
+}
+.logo-text {
+  display: flex;
+  flex-direction: column;
+}
+.logo-title {
+  color: #fff;
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: 1px;
+}
+.logo-subtitle {
+  color: rgba(255,255,255,0.6);
+  font-size: 10px;
+  margin-top: 2px;
 }
 .menu-group {
   padding: 16px 20px 8px;
