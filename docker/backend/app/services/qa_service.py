@@ -30,7 +30,8 @@ async def rag_pipeline(db: AsyncSession, conversation_id: int, question: str, mo
 
     history = await message_dao.get_recent_history(db, conversation_id, history_rounds)
 
-    question_embedding = await embedding_client.encode_from_db(db, question)
+    embed_result = await embedding_client.encode_from_db(db, question)
+    question_embedding = embed_result["embeddings"][0]
     results = chroma_repo.query(question_embedding, top_k)
 
     sources = []
@@ -142,6 +143,14 @@ async def rag_pipeline(db: AsyncSession, conversation_id: int, question: str, mo
     llm_result = await llm_client.chat_from_db(db, model_name, messages, temperature, top_p, max_tokens)
     answer = llm_result["content"]
     tokens_used = llm_result["tokens_used"]
+
+    # 记录 token 消耗到独立表
+    from app.dao import token_usage_dao
+    await token_usage_dao.create(
+        db, model_name=model_name, model_type="chat",
+        tokens_used=tokens_used, source_type="qa",
+        source_id=conversation_id, source_name=question[:100]
+    )
 
     msg = await message_dao.create(db, conversation_id, "bot", answer, sources=sources, kg_references=kg_references, model_name=model_name, tokens_used=tokens_used)
     await db.commit()

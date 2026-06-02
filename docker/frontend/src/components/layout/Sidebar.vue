@@ -2,8 +2,13 @@
   <el-container style="height: 100vh">
     <el-aside :width="isCollapse ? '64px' : '220px'" style="background:#001529;transition:width 0.3s">
       <div class="logo" :style="{ padding: isCollapse ? '16px 8px' : '16px 20px' }">
-        <span v-if="!isCollapse" style="color:#fff;font-size:16px;font-weight:bold">RAG 智能问答</span>
-        <span v-else style="color:#fff;font-size:18px">R</span>
+        <div class="logo-icon">
+          <el-icon :size="isCollapse ? 20 : 24" color="#fff"><ChatDotRound /></el-icon>
+        </div>
+        <div v-if="!isCollapse" class="logo-text">
+          <div class="logo-title">RAG</div>
+          <div class="logo-subtitle">智能问答系统</div>
+        </div>
       </div>
       <el-menu
         :default-active="$route.path"
@@ -76,18 +81,27 @@
           <Fold v-if="!isCollapse" />
           <Expand v-else />
         </el-icon>
-        <el-dropdown @command="handleCommand">
-          <span style="cursor:pointer">
-            {{ auth.user?.username }}
-            <el-icon><ArrowDown /></el-icon>
-          </span>
-          <template #dropdown>
-            <el-dropdown-menu>
-              <el-dropdown-item command="profile">个人中心</el-dropdown-item>
-              <el-dropdown-item command="logout" divided>退出登录</el-dropdown-item>
-            </el-dropdown-menu>
-          </template>
-        </el-dropdown>
+        <div style="display:flex;align-items:center;gap:16px">
+          <el-tooltip content="全屏" placement="bottom">
+            <el-icon style="cursor:pointer;font-size:18px;color:#909399" @click="toggleFullscreen"><FullScreen /></el-icon>
+          </el-tooltip>
+          <el-dropdown @command="handleCommand">
+            <div style="display:flex;align-items:center;gap:10px;cursor:pointer">
+              <div class="header-avatar">
+                <span v-if="!avatarUrl">{{ (auth.user?.username||'?')[0].toUpperCase() }}</span>
+                <img v-else :src="avatarUrl" style="width:100%;height:100%;object-fit:cover;border-radius:50%" />
+              </div>
+              <span style="font-size:14px;font-weight:500">{{ auth.user?.username }}</span>
+              <el-icon><ArrowDown /></el-icon>
+            </div>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item command="profile">个人中心</el-dropdown-item>
+                <el-dropdown-item command="logout" divided>退出登录</el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
+        </div>
       </el-header>
 
       <el-main style="background:#f0f2f5;padding:20px">
@@ -103,12 +117,24 @@ import { useRouter } from 'vue-router'
 import { useAuthStore } from '../../stores/auth'
 import {
   Monitor, Document, Share, User, Clock, Setting, Tools,
-  ChatDotRound, Fold, Expand, ArrowDown
+  ChatDotRound, Fold, Expand, ArrowDown, FullScreen
 } from '@element-plus/icons-vue'
 
 const router = useRouter()
 const auth = useAuthStore()
 const isCollapse = ref(false)
+const avatarUrl = ref(localStorage.getItem('avatar_' + auth.user?.id) || '')
+
+function toggleFullscreen() {
+  const el = document.documentElement
+  if (!document.fullscreenElement) {
+    if (el.requestFullscreen) el.requestFullscreen()
+    else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen()
+  } else {
+    if (document.exitFullscreen) document.exitFullscreen()
+    else if (document.webkitExitFullscreen) document.webkitExitFullscreen()
+  }
+}
 
 function handleCommand(cmd) {
   if (cmd === 'logout') {
@@ -126,6 +152,34 @@ function handleCommand(cmd) {
   display: flex;
   align-items: center;
   justify-content: center;
+  gap: 12px;
+}
+.logo-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-shadow: 0 4px 0 rgba(0,0,0,0.2);
+}
+.logo-text {
+  display: flex;
+  flex-direction: column;
+}
+.logo-title {
+  color: #fff;
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: 1px;
+}
+.logo-subtitle {
+  color: rgba(255,255,255,0.6);
+  font-size: 10px;
+  margin-top: 2px;
 }
 .menu-group {
   padding: 16px 20px 8px;
@@ -133,5 +187,19 @@ function handleCommand(cmd) {
   color: #ffffff60;
   text-transform: uppercase;
   letter-spacing: 1px;
+}
+.header-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #667eea, #764ba2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 600;
+  color: #fff;
+  overflow: hidden;
+  flex-shrink: 0;
 }
 </style>

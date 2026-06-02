@@ -1,0 +1,249 @@
+/* Claymorphism Design System */
+/* Shared styles for consistent clay-style UI */
+
+/* Hero Banner */
+.clay-hero {
+  border-radius: 20px;
+  padding: 28px 32px;
+  position: relative;
+  overflow: hidden;
+}
+.clay-hero-title {
+  color: #fff;
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+  position: relative;
+  z-index: 1;
+}
+.clay-hero-subtitle {
+  color: rgba(255,255,255,0.85);
+  margin: 6px 0 0;
+  font-size: 13px;
+  position: relative;
+  z-index: 1;
+}
+
+/* Clay Card */
+.clay-card {
+  background: #fff;
+  border-radius: 16px;
+  padding: 20px 16px;
+  border: 3px solid #f0f0f0;
+  box-shadow: 0 4px 0 #f0f0f0, 0 6px 20px rgba(0,0,0,0.04);
+  transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.clay-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 0 #f0f0f0, 0 12px 30px rgba(0,0,0,0.08);
+}
+
+/* Clay Panel */
+.clay-panel {
+  background: #fff;
+  border-radius: 16px;
+  border: 3px solid #f0f0f0;
+  box-shadow: 0 4px 0 #f0f0f0, 0 6px 20px rgba(0,0,0,0.04);
+  overflow: hidden;
+}
+.clay-panel-header {
+  padding: 16px 22px;
+  border-bottom: 2px solid #f0f0f0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.clay-panel-title {
+  font-weight: 700;
+  font-size: 16px;
+  color: #1a1a2e;
+}
+
+/* Clay Input */
+.clay-input :deep(.el-input__wrapper) {
+  border-radius: 12px;
+  border: 2px solid #e8e8e8;
+  box-shadow: 0 3px 0 #e8e8e8;
+  transition: all 0.2s;
+}
+.clay-input :deep(.el-input__wrapper:focus-within) {
+  border-color: #667eea;
+  box-shadow: 0 3px 0 #667eea;
+}
+
+/* Clay Button */
+.clay-btn {
+  border-radius: 12px;
+  border: 2px solid transparent;
+  box-shadow: 0 3px 0 rgba(0,0,0,0.1);
+  font-weight: 600;
+  transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.clay-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 5px 0 rgba(0,0,0,0.1);
+}
+.clay-btn:active {
+  transform: translateY(1px);
+  box-shadow: 0 1px 0 rgba(0,0,0,0.1);
+}
+
+/* Clay Tag */
+.clay-tag {
+  border-radius: 10px;
+  font-weight: 600;
+  border: 2px solid transparent;
+}
+
+/* Stat Card */
+.clay-stat {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.clay-stat-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border: 2px solid;
+  box-shadow: 0 3px 0 rgba(0,0,0,0.06);
+}
+.clay-stat-label {
+  font-size: 12px;
+  color: #909399;
+  font-weight: 500;
+}
+.clay-stat-value {
+  font-size: 26px;
+  font-weight: 800;
+  margin-top: 2px;
+  line-height: 1;
+}
+
+/* Action Grid */
+.clay-action-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  padding: 18px;
+}
+.clay-action-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 20px 12px;
+  border-radius: 14px;
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.clay-action-item:hover {
+  transform: translateY(-4px) scale(1.02);
+  box-shadow: 0 6px 0 var(--action-bg), 0 10px 20px rgba(0,0,0,0.06);
+  border-color: var(--action-color);
+}
+.clay-action-icon {
+  width: 52px;
+  height: 52px;
+  border-radius: 16px;
+  background: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 3px 0 rgba(0,0,0,0.06);
+}
+.clay-action-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1a1a2e;
+}
+
+/* Table */
+.clay-table :deep(.el-table__header th) {
+  background: #fafafa;
+  font-weight: 600;
+  color: #606266;
+}
+.clay-table :deep(.el-table__row:hover > td) {
+  background: #f5f7fa;
+}
+
+/* Dialog */
+.clay-dialog :deep(.el-dialog) {
+  border-radius: 20px;
+  border: 3px solid #f0f0f0;
+  box-shadow: 0 8px 0 #f0f0f0, 0 16px 40px rgba(0,0,0,0.1);
+}
+.clay-dialog :deep(.el-dialog__header) {
+  border-bottom: 2px solid #f0f0f0;
+  padding: 18px 24px;
+}
+.clay-dialog :deep(.el-dialog__title) {
+  font-weight: 700;
+  font-size: 17px;
+}
+.clay-dialog :deep(.el-dialog__footer) {
+  border-top: 2px solid #f0f0f0;
+  padding: 14px 24px;
+}
+
+/* Pagination */
+.clay-pagination :deep(.el-pagination) {
+  gap: 6px;
+}
+.clay-pagination :deep(.el-pager li) {
+  border-radius: 10px;
+  border: 2px solid #e8e8e8;
+  box-shadow: 0 2px 0 #e8e8e8;
+}
+.clay-pagination :deep(.el-pager li.is-active) {
+  background: #667eea;
+  border-color: #667eea;
+  box-shadow: 0 2px 0 #4f5bd5;
+}
+
+/* Empty State */
+.clay-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+}
+.clay-empty-icon {
+  width: 80px;
+  height: 80px;
+  border-radius: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 16px;
+}
+.clay-empty-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #303133;
+  margin-bottom: 8px;
+}
+.clay-empty-desc {
+  font-size: 13px;
+  color: #909399;
+}
+
+/* Decorative Circles */
+.deco-circle {
+  position: absolute;
+  border-radius: 50%;
+  opacity: 0.15;
+}
+@keyframes clay-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-12px); }
+}
