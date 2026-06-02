@@ -1,3 +1,9 @@
+"""
+智能问答服务模块
+功能：实现 RAG（检索增强生成）问答核心流程
+流程：问题向量化 → 向量检索 → 知识图谱补充 → LLM 生成回答
+"""
+
 import time
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -12,28 +18,48 @@ from app.dao import config_dao
 
 
 async def get_system_config(db: AsyncSession) -> dict:
+    """获取系统配置（检索参数、模型参数等）"""
     result = await db.execute(select(SystemConfig))
     rows = result.scalars().all()
     return {r.config_key: r.config_value for r in rows}
 
 
 async def rag_pipeline(db: AsyncSession, conversation_id: int, question: str, model_name: str, user_id: int) -> dict:
-    start_time = time.time()
-    config = await get_system_config(db)
-    top_k = int(config.get("top_k", "5"))
-    threshold = float(config.get("similarity_threshold", "0.6"))
-    history_rounds = int(config.get("history_rounds", "5"))
-    kg_enabled = config.get("kg_enabled", "true") == "true"
+    """
+    RAG 问答核心流程
 
+    参数:
+        db: 数据库会话
+        conversation_id: 会话ID
+        question: 用户问题
+        model_name: 使用的模型名称
+        user_id: 用户ID
+
+    返回:
+        dict: 包含 answer, sources, kg_references, model_used, tokens_used, response_time_ms 等
+    """
+    start_time = time.time()
+
+    # 第一步：获取系统配置
+    config = await get_system_config(db)
+    top_k = int(config.get("top_k", "5"))                    # 向量检索返回的最相似文档数量
+    threshold = float(config.get("similarity_threshold", "0.6"))  # 相似度阈值，低于此值不使用
+    history_rounds = int(config.get("history_rounds", "5"))   # 携带的历史对话轮数
+    kg_enabled = config.get("kg_enabled", "true") == "true"   # 是否启用知识图谱增强
+
+    # 第二步：保存用户消息到数据库
     await message_dao.create(db, conversation_id, "user", question)
     await db.commit()
 
+    # 第三步：获取对话历史（用于多轮对话上下文）
     history = await message_dao.get_recent_history(db, conversation_id, history_rounds)
 
+    # 第四步：问题向量化 + 向量检索
     embed_result = await embedding_client.encode_from_db(db, question)
     question_embedding = embed_result["embeddings"][0]
     results = chroma_repo.query(question_embedding, top_k)
 
+    # 第五步：筛选相似度达标的文档片段
     sources = []
     context_parts = []
     max_similarity = 0.0
@@ -44,7 +70,7 @@ async def rag_pipeline(db: AsyncSession, conversation_id: int, question: str, mo
             results["metadatas"][0],
             results["distances"][0],
         )):
-            similarity = 1.0 - dist
+            similarity = 1.0 - dist  # ChromaDB 返回的是距离，转换为相似度
             max_similarity = max(max_similarity, similarity)
             if similarity >= threshold:
                 context_parts.append(doc)
@@ -55,6 +81,7 @@ async def rag_pipeline(db: AsyncSession, conversation_id: int, question: str, mo
                     "similarity": round(similarity, 4),
                 })
 
+    # 第六步：相似度兜底判断
     if max_similarity < threshold:
         fallback_answer = "知识库中暂无相关信息，请尝试更换问题或补充相关文档。"
         msg = await message_dao.create(db, conversation_id, "bot", fallback_answer, sources=[], kg_references=None, model_name=None)
@@ -72,6 +99,7 @@ async def rag_pipeline(db: AsyncSession, conversation_id: int, question: str, mo
             "max_similarity": round(max_similarity, 4),
         }
 
+    # 第七步：知识图谱补充（可选）
     kg_context = ""
     kg_references = None
     if kg_enabled:
@@ -95,10 +123,12 @@ async def rag_pipeline(db: AsyncSession, conversation_id: int, question: str, mo
         except Exception:
             pass
 
+    # 第八步：组装上下文
     context = "\n\n---\n\n".join(context_parts) if context_parts else "暂无相关参考资料"
     if kg_context:
         context += kg_context
 
+    # 第九步：格式化对话历史
     history_text = ""
     if history:
         lines = []
@@ -107,7 +137,7 @@ async def rag_pipeline(db: AsyncSession, conversation_id: int, question: str, mo
             lines.append(f"{role}: {h.content[:200]}")
         history_text = "\n".join(lines)
 
-    # Try to get model-specific system prompt template
+    # 第十步：获取模型配置和 System Prompt
     model_config = None
     for c in await model_dao.get_configs(db, "chat"):
         if c.model_name == model_name:
@@ -119,6 +149,7 @@ async def rag_pipeline(db: AsyncSession, conversation_id: int, question: str, mo
     base_instructions = (model_config.system_prompt if model_config and model_config.system_prompt else
         "你是一个专业的企业知识库助手，请根据以下参考资料回答用户的问题。")
 
+    # 第十一步：组装完整的 Prompt
     system_prompt = f"""{base_instructions}
 
 ## 参考资料
@@ -136,6 +167,7 @@ async def rag_pipeline(db: AsyncSession, conversation_id: int, question: str, mo
     messages = [{"role": "system", "content": system_prompt}]
     messages.append({"role": "user", "content": question})
 
+    # 第十二步：调用 LLM 生成回答
     temperature = float(config.get("temperature", "0.7"))
     top_p = float(config.get("top_p", "0.9"))
     max_tokens = int(config.get("max_tokens", "2048"))
@@ -144,7 +176,7 @@ async def rag_pipeline(db: AsyncSession, conversation_id: int, question: str, mo
     answer = llm_result["content"]
     tokens_used = llm_result["tokens_used"]
 
-    # 记录 token 消耗到独立表
+    # 第十三步：记录 token 消耗到独立表（用于用量统计）
     from app.dao import token_usage_dao
     await token_usage_dao.create(
         db, model_name=model_name, model_type="chat",
@@ -152,9 +184,11 @@ async def rag_pipeline(db: AsyncSession, conversation_id: int, question: str, mo
         source_id=conversation_id, source_name=question[:100]
     )
 
+    # 第十四步：保存机器人回答到数据库
     msg = await message_dao.create(db, conversation_id, "bot", answer, sources=sources, kg_references=kg_references, model_name=model_name, tokens_used=tokens_used)
     await db.commit()
 
+    # 第十五步：返回结果
     elapsed = int((time.time() - start_time) * 1000)
     return {
         "message_id": msg.id,

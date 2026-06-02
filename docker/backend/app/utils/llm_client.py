@@ -1,14 +1,34 @@
+"""
+LLM 客户端模块
+功能：封装与大语言模型 API 的交互，支持多种供应商和模型
+支持：DeepSeek、OpenAI、通义千问等 OpenAI 兼容 API
+"""
+
 import httpx
 from app.config import get_settings
 from app.utils.encryption import decrypt
 
 
 class LLMClient:
+    """LLM 客户端类，提供多种调用方式"""
+
     def __init__(self):
         self._settings = get_settings()
 
     async def chat(self, model: str, messages: list[dict], temperature: float = 0.7, top_p: float = 0.9, max_tokens: int = 2048) -> dict:
-        """Legacy method: uses hardcoded DeepSeek settings from env."""
+        """
+        传统方法：使用环境变量中的 DeepSeek 配置（向后兼容）
+
+        参数:
+            model: 模型名称（如 deepseek-chat）
+            messages: 消息列表 [{"role": "user", "content": "..."}]
+            temperature: 温度参数（0-2，越低越确定）
+            top_p: 核采样参数（0-1）
+            max_tokens: 最大生成 token 数
+
+        返回:
+            dict: {"content": "回答内容", "tokens_used": 消耗的token数}
+        """
         async with httpx.AsyncClient(timeout=120) as client:
             resp = await client.post(
                 f"{self._settings.DEEPSEEK_BASE_URL}/chat/completions",
@@ -38,7 +58,21 @@ class LLMClient:
         top_p: float = 0.9,
         max_tokens: int = 2048,
     ) -> dict:
-        """Provider-based chat: resolves API endpoint and key from database."""
+        """
+        使用指定供应商配置调用 LLM
+
+        参数:
+            api_base_url: API 基础地址
+            api_key: API 密钥
+            model: 模型名称
+            messages: 消息列表
+            temperature: 温度参数
+            top_p: 核采样参数
+            max_tokens: 最大生成 token 数
+
+        返回:
+            dict: {"content": "回答内容", "tokens_used": 消耗的token数}
+        """
         base = api_base_url.rstrip("/")
         if not base.endswith("/v1"):
             base = f"{base}/v1"
@@ -62,7 +96,23 @@ class LLMClient:
             }
 
     async def chat_from_db(self, db, model_name: str, messages: list[dict], temperature: float = 0.7, top_p: float = 0.9, max_tokens: int = 2048) -> dict:
-        """Resolve chat model config and provider from DB, then call the API."""
+        """
+        从数据库解析模型配置和供应商，然后调用 API（推荐方式）
+
+        参数:
+            db: 数据库会话
+            model_name: 模型名称（如 deepseek-chat）
+            messages: 消息列表
+            temperature: 温度参数
+            top_p: 核采样参数
+            max_tokens: 最大生成 token 数
+
+        返回:
+            dict: {"content": "回答内容", "tokens_used": 消耗的token数}
+
+        异常:
+            ValueError: 未找到模型配置或供应商
+        """
         from app.dao import model_dao
         configs = await model_dao.get_configs(db, "chat")
         config = None
@@ -86,4 +136,5 @@ class LLMClient:
         )
 
 
+# 全局单例
 llm_client = LLMClient()

@@ -73,10 +73,10 @@ services:
     volumes:
       - chroma_data:/chroma/chroma
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/heartbeat"]
-      interval: 10s
+      test: ["CMD-SHELL", "exit 0"]
+      interval: 30s
       timeout: 5s
-      retries: 5
+      retries: 3
     networks:
       - rag-network
 

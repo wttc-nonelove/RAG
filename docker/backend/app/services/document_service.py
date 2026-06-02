@@ -1,3 +1,9 @@
+"""
+文档服务模块
+功能：处理文档的上传、解析、向量化、知识图谱抽取和删除
+支持格式：PDF、DOCX、TXT、MD（Markdown）、XLSX、XLS（Excel）、CSV
+"""
+
 import os
 import pdfplumber
 from docx import Document as DocxDocument
@@ -11,10 +17,21 @@ from app.utils.kg_extractor import extract as kg_extract
 from app.dao import neo4j_repo
 
 
+# 支持的文件类型映射
 ALLOWED_TYPES = {"PDF": ".pdf", "DOCX": ".docx", "TXT": ".txt", "MD": ".md", "XLSX": ".xlsx", "XLS": ".xls", "CSV": ".csv"}
 
 
 async def get_document_stats(db: AsyncSession) -> dict:
+    """
+    获取文档统计数据
+
+    返回:
+        dict: {
+            "total": 总文件数,
+            "type_counts": {"PDF": 5, "DOCX": 3, ...},
+            "status_counts": {"completed": 10, "pending": 2, ...}
+        }
+    """
     from sqlalchemy import select, func
     # 总文件数
     total = (await db.execute(select(func.count()).select_from(Document))).scalar()
@@ -36,6 +53,7 @@ async def get_document_stats(db: AsyncSession) -> dict:
 
 
 def _detect_type(filename: str) -> str:
+    """根据文件扩展名检测文件类型"""
     ext = os.path.splitext(filename)[1].lower()
     for ft, e in ALLOWED_TYPES.items():
         if e == ext:
@@ -44,6 +62,19 @@ def _detect_type(filename: str) -> str:
 
 
 async def upload_and_parse(db: AsyncSession, file_content: bytes, filename: str, tag: str, user_id: int) -> Document:
+    """
+    上传文档并保存到数据库
+
+    参数:
+        db: 数据库会话
+        file_content: 文件内容（字节）
+        filename: 文件名
+        tag: 标签（可选）
+        user_id: 上传用户ID
+
+    返回:
+        Document: 创建的文档记录
+    """
     file_type = _detect_type(filename)
     filepath = file_store.save_file(file_content, filename)
     doc = Document(
@@ -61,20 +92,32 @@ async def upload_and_parse(db: AsyncSession, file_content: bytes, filename: str,
 
 
 async def parse_document(doc_id: int) -> None:
+    """
+    异步解析文档（后台任务）
+    流程：提取文本 → 清洗 → 分块 → 向量化 → 入库 ChromaDB → 知识图谱抽取 → 入库 Neo4j
+
+    参数:
+        doc_id: 文档ID
+    """
     from app.database import async_session
     async with async_session() as db:
         doc = await document_dao.get_by_id(db, doc_id)
         if not doc:
             return
 
+        # 更新状态为"解析中"
         await document_dao.update_status(db, doc_id, "parsing")
         await db.commit()
 
         try:
+            # 第一步：提取文本
             text = _extract_text(doc.file_path, doc.file_type)
+            # 第二步：清洗文本
             text = clean_text(text)
+            # 第三步：分块
             chunks = chunk_text(text)
 
+            # 第四步：向量化并入库 ChromaDB
             embed_result = await embedding_client.encode_batch_from_db(db, chunks)
             embeddings = embed_result["embeddings"]
             embedding_tokens = embed_result["tokens_used"]
@@ -99,6 +142,7 @@ async def parse_document(doc_id: int) -> None:
                 await db.execute(update(Document).where(Document.id == doc_id).values(embedding_tokens=embedding_tokens))
                 await db.commit()
 
+            # 第五步：知识图谱抽取
             try:
                 # 从数据库读取提取参数配置
                 from app.dao import config_dao
@@ -139,15 +183,22 @@ async def parse_document(doc_id: int) -> None:
                 import loguru
                 loguru.logger.error(f"KG storage failed: {e}")
 
+            # 更新状态为"已完成"
             await document_dao.update_status(db, doc_id, "completed")
         except Exception as e:
+            # 更新状态为"失败"
             await document_dao.update_status(db, doc_id, "failed", str(e))
 
         await db.commit()
 
 
 async def extract_kg_for_doc(doc_id: int) -> None:
-    """手动触发指定文档的知识图谱抽取"""
+    """
+    手动触发指定文档的知识图谱抽取
+
+    参数:
+        doc_id: 文档ID
+    """
     from app.database import async_session
     async with async_session() as db:
         doc = await document_dao.get_by_id(db, doc_id)
@@ -170,6 +221,16 @@ async def extract_kg_for_doc(doc_id: int) -> None:
 
 
 def _extract_text(filepath: str, file_type: str) -> str:
+    """
+    根据文件类型提取文本内容
+
+    参数:
+        filepath: 文件路径
+        file_type: 文件类型（PDF/DOCX/TXT/MD/XLSX/XLS/CSV）
+
+    返回:
+        str: 提取的文本内容
+    """
     if file_type == "PDF":
         with pdfplumber.open(filepath) as pdf:
             return "\n\n".join(page.extract_text() or "" for page in pdf.pages)
@@ -206,6 +267,18 @@ def _extract_text(filepath: str, file_type: str) -> str:
 
 
 async def get_preview(db: AsyncSession, doc_id: int, page: int = 1, page_size: int = 50) -> dict:
+    """
+    获取文档预览（分页）
+
+    参数:
+        db: 数据库会话
+        doc_id: 文档ID
+        page: 页码
+        page_size: 每页行数
+
+    返回:
+        dict: {filename, total_pages, current_page, page_size, content, has_next}
+    """
     doc = await document_dao.get_by_id(db, doc_id)
     if not doc:
         raise ValueError("文档不存在")
@@ -225,26 +298,42 @@ async def get_preview(db: AsyncSession, doc_id: int, page: int = 1, page_size: i
 
 
 async def delete_document(db: AsyncSession, doc_id: int) -> None:
+    """
+    删除文档（级联清理：ChromaDB向量 + Neo4j图谱 + 本地文件 + 数据库记录）
+
+    参数:
+        db: 数据库会话
+        doc_id: 文档ID
+    """
     doc = await document_dao.get_by_id(db, doc_id)
     if not doc:
         return
+    # 清理 ChromaDB 向量
     try:
         chroma_repo.delete_by_doc_id(doc_id)
     except Exception as e:
         import loguru
         loguru.logger.warning(f"ChromaDB delete failed for doc {doc_id}: {e}")
+    # 清理 Neo4j 图谱
     try:
         neo4j_repo.delete_by_doc_id(doc_id)
     except Exception as e:
         import loguru
         loguru.logger.warning(f"Neo4j delete failed for doc {doc_id}: {e}")
+    # 删除本地文件
     file_store.delete_file(doc.file_path)
+    # 删除数据库记录
     await document_dao.delete_doc(db, doc_id)
     await db.commit()
 
 
 async def cleanup_orphan_entities(db: AsyncSession) -> int:
-    """清理没有对应文档的孤立实体"""
+    """
+    清理没有对应文档的孤立实体
+
+    返回:
+        int: 删除的实体数量
+    """
     # 获取所有文档 ID
     docs = await document_dao.get_all_ids(db)
     doc_ids = set(docs) if docs else set()

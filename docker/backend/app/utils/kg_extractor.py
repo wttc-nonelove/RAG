@@ -1,8 +1,15 @@
+"""
+知识图谱抽取模块
+功能：使用大语言模型从文本中提取实体和关系，构建知识图谱
+"""
+
 import json
 import re
 from app.utils.llm_client import llm_client
 
 
+# 知识图谱抽取的 Prompt 模板
+# 要求 LLM 从文本中提取实体和关系，并以 JSON 格式返回
 EXTRACT_PROMPT = """请从以下文本中提取实体和关系，返回 JSON 格式：
 {{"entities": [{{"name": "实体名", "type": "类型", "description": "描述"}}], "relations": [{{"source": "源实体", "relation": "关系", "target": "目标实体"}}]}}
 
@@ -15,8 +22,24 @@ EXTRACT_PROMPT = """请从以下文本中提取实体和关系，返回 JSON 格
 
 
 async def extract(text: str, doc_id: int, doc_name: str, db=None, model_name: str = None) -> dict:
+    """
+    从文本中提取实体和关系
+
+    参数:
+        text: 待提取的文本内容
+        doc_id: 文档ID，用于标记实体来源
+        doc_name: 文档名称，用于标记实体来源
+        db: 数据库会话，用于从配置中读取模型信息
+        model_name: 指定使用的模型名称，为None时使用默认模型
+
+    返回:
+        dict: 包含 entities 和 relations 的字典
+              entities: [{"name": "实体名", "type": "类型", "description": "描述", "doc_id": 1, "doc_name": "文件名"}]
+              relations: [{"source": "源实体", "relation": "关系", "target": "目标实体"}]
+    """
     try:
-        prompt = EXTRACT_PROMPT.format(text=text[:5000])  # 增加到5000字符
+        # 截取前5000字符进行提取（避免超出模型token限制）
+        prompt = EXTRACT_PROMPT.format(text=text[:5000])
         messages = [{"role": "user", "content": prompt}]
 
         if db:
@@ -31,6 +54,7 @@ async def extract(text: str, doc_id: int, doc_name: str, db=None, model_name: st
                         break
                 model_name = kg_model if kg_model else None
 
+            # 使用指定模型或默认模型
             if model_name:
                 result = await llm_client.chat_from_db(db, model_name, messages, temperature=0.1, max_tokens=2048)
             else:
@@ -42,8 +66,10 @@ async def extract(text: str, doc_id: int, doc_name: str, db=None, model_name: st
                 else:
                     result = await llm_client.chat("deepseek-chat", messages, temperature=0.1, max_tokens=2048)
         else:
+            # 无数据库连接时使用硬编码的 deepseek-chat
             result = await llm_client.chat("deepseek-chat", messages, temperature=0.1, max_tokens=2048)
 
+        # 解析 LLM 返回的 JSON
         content = result["content"]
         json_match = re.search(r"\{[\s\S]*\}", content)
         if json_match:
@@ -53,7 +79,7 @@ async def extract(text: str, doc_id: int, doc_name: str, db=None, model_name: st
             except json.JSONDecodeError:
                 # 尝试多种修复方式
                 try:
-                    # 修复尾随逗号
+                    # 修复尾随逗号（如 {"a": 1,}）
                     raw = re.sub(r",\s*([}\]])", r"\1", raw)
                     data = json.loads(raw)
                 except json.JSONDecodeError:
@@ -64,7 +90,7 @@ async def extract(text: str, doc_id: int, doc_name: str, db=None, model_name: st
                     try:
                         data = json.loads(raw)
                     except json.JSONDecodeError:
-                        # 最后尝试：提取 entities 和 relations 数组
+                        # 最后尝试：分别提取 entities 和 relations 数组
                         entities_match = re.search(r'"entities"\s*:\s*\[(.*?)\]', raw, re.DOTALL)
                         relations_match = re.search(r'"relations"\s*:\s*\[(.*?)\]', raw, re.DOTALL)
                         entities = []
@@ -80,6 +106,8 @@ async def extract(text: str, doc_id: int, doc_name: str, db=None, model_name: st
                             except:
                                 pass
                         data = {"entities": entities, "relations": relations}
+
+            # 为每个实体添加文档来源信息
             for e in data.get("entities", []):
                 e["doc_id"] = doc_id
                 e["doc_name"] = doc_name
@@ -87,4 +115,6 @@ async def extract(text: str, doc_id: int, doc_name: str, db=None, model_name: st
     except Exception as e:
         import loguru
         loguru.logger.error(f"KG extraction failed: {e}")
+
+    # 提取失败时返回空结果
     return {"entities": [], "relations": []}
