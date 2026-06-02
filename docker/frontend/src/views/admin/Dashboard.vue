@@ -1,94 +1,99 @@
 <template>
   <div>
-    <h2>工作台</h2>
+    <!-- 页面标题区域 -->
+    <div style="background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);border-radius:12px;padding:24px 28px;margin-bottom:20px">
+      <h2 style="color:#fff;margin:0;font-size:22px;font-weight:600">工作台</h2>
+      <p style="color:rgba(255,255,255,0.8);margin:6px 0 0;font-size:13px">欢迎回来，{{ username }}！系统运行正常</p>
+    </div>
 
     <!-- 统计卡片 -->
-    <el-row :gutter="16" style="margin-top:20px">
+    <el-row :gutter="16">
       <el-col :span="4" v-for="item in stats" :key="item.label">
-        <el-card shadow="hover">
-          <div style="display:flex;align-items:center;gap:12px">
-            <div :style="getIconStyle(item.bgColor)">
-              <el-icon :size="22" :color="item.iconColor"><component :is="item.icon" /></el-icon>
-            </div>
-            <div>
-              <div style="font-size:12px;color:#909399">{{ item.label }}</div>
-              <div style="font-size:24px;font-weight:bold;margin-top:2px;color:#303133">{{ item.value }}</div>
-            </div>
+        <div class="stat-card" :style="{'--accent': item.iconColor}">
+          <div class="stat-icon" :style="{background: item.bgColor}">
+            <el-icon :size="22" :color="item.iconColor"><component :is="item.icon" /></el-icon>
           </div>
-        </el-card>
+          <div>
+            <div class="stat-label">{{ item.label }}</div>
+            <div class="stat-value">{{ item.value }}</div>
+          </div>
+        </div>
       </el-col>
     </el-row>
 
     <!-- 问答趋势图 + 系统状态 -->
     <el-row :gutter="20" style="margin-top:20px">
       <el-col :span="16">
-        <el-card shadow="hover">
-          <template #header>
-            <div style="display:flex;justify-content:space-between;align-items:center">
-              <span style="font-weight:bold">问答趋势</span>
-              <el-radio-group v-model="trendDays" size="small" @change="loadTrends">
-                <el-radio-button :value="7">近7天</el-radio-button>
-                <el-radio-button :value="30">近30天</el-radio-button>
-              </el-radio-group>
-            </div>
-          </template>
+        <div class="panel">
+          <div class="panel-header">
+            <span class="panel-title">问答趋势</span>
+            <el-radio-group v-model="trendDays" size="small" @change="loadTrends">
+              <el-radio-button :value="7">近7天</el-radio-button>
+              <el-radio-button :value="30">近30天</el-radio-button>
+            </el-radio-group>
+          </div>
           <div ref="trendChartRef" style="width:100%;height:280px"></div>
-        </el-card>
+        </div>
       </el-col>
       <el-col :span="8">
-        <el-card shadow="hover" style="height:100%">
-          <template #header>
-            <span style="font-weight:bold">系统状态</span>
-          </template>
-          <div v-for="(status, name) in systemStatus" :key="name" style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid #f0f0f0">
-            <div style="display:flex;align-items:center;gap:8px">
-              <span :style="{width:'8px',height:'8px',borderRadius:'50%',background:status==='ok'?'#67c23a':'#f56c6c',display:'inline-block'}"></span>
-              <span style="font-size:14px">{{ serviceNames[name] || name }}</span>
-            </div>
-            <el-tag :type="status==='ok'?'success':'danger'" size="small">{{ status==='ok'?'正常':'异常' }}</el-tag>
+        <div class="panel" style="height:100%">
+          <div class="panel-header">
+            <span class="panel-title">系统状态</span>
+            <span class="status-dot" :class="allHealthy ? 'healthy' : 'unhealthy'"></span>
           </div>
-        </el-card>
+          <div v-for="(status, name) in systemStatus" :key="name" class="status-item">
+            <div style="display:flex;align-items:center;gap:10px">
+              <span class="status-dot" :class="status === 'ok' ? 'healthy' : 'unhealthy'"></span>
+              <span style="font-size:14px;font-weight:500">{{ serviceNames[name] || name }}</span>
+            </div>
+            <el-tag :type="status === 'ok' ? 'success' : 'danger'" size="small" effect="dark" round>
+              {{ status === 'ok' ? '正常' : '异常' }}
+            </el-tag>
+          </div>
+        </div>
       </el-col>
     </el-row>
 
     <!-- 文档分布 + 存储用量 + 快捷操作 -->
     <el-row :gutter="20" style="margin-top:20px">
       <el-col :span="8">
-        <el-card shadow="hover">
-          <template #header>
-            <span style="font-weight:bold">文档分布</span>
-          </template>
-          <div ref="docTypeChartRef" style="width:100%;height:200px"></div>
-        </el-card>
-      </el-col>
-      <el-col :span="8">
-        <el-card shadow="hover">
-          <template #header>
-            <span style="font-weight:bold">存储用量</span>
-          </template>
-          <div style="padding:10px 0">
-            <div style="font-size:14px;margin-bottom:12px">文件存储：<b>{{ storage.documents_mb }} MB</b></div>
-            <el-progress :percentage="storagePercent" :stroke-width="12" :format="(p) => p + '%'" />
-            <div style="font-size:12px;color:#909399;margin-top:8px">向量库规模：约 {{ totalChunks }} 条向量</div>
+        <div class="panel">
+          <div class="panel-header">
+            <span class="panel-title">文档分布</span>
           </div>
-        </el-card>
+          <div ref="docTypeChartRef" style="width:100%;height:220px"></div>
+        </div>
       </el-col>
       <el-col :span="8">
-        <el-card shadow="hover">
-          <template #header>
-            <span style="font-weight:bold">快捷操作</span>
-          </template>
-          <div style="display:flex;gap:12px;flex-wrap:wrap">
+        <div class="panel">
+          <div class="panel-header">
+            <span class="panel-title">存储用量</span>
+          </div>
+          <div style="padding:20px 0">
+            <div style="text-align:center;margin-bottom:16px">
+              <div style="font-size:36px;font-weight:700;color:#409eff">{{ storage.documents_mb }}</div>
+              <div style="font-size:13px;color:#909399;margin-top:4px">MB 已使用</div>
+            </div>
+            <el-progress :percentage="storagePercent" :stroke-width="14" :format="(p) => p + '%'" style="margin:0 20px" />
+            <div style="font-size:12px;color:#909399;margin-top:12px;text-align:center">向量库：约 {{ totalChunks.toLocaleString() }} 条向量</div>
+          </div>
+        </div>
+      </el-col>
+      <el-col :span="8">
+        <div class="panel">
+          <div class="panel-header">
+            <span class="panel-title">快捷操作</span>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:4px">
             <div v-for="action in quickActions" :key="action.label"
-              :style="getActionStyle(action.bgColor)"
-              @click="$router.push(action.route)"
-              @mouseenter="$event.currentTarget.style.transform='translateY(-2px)'"
-              @mouseleave="$event.currentTarget.style.transform='translateY(0)'">
-              <el-icon :size="24" :color="action.iconColor" style="display:block;margin:0 auto 6px"><component :is="action.icon" /></el-icon>
-              <div style="font-size:12px;color:#303133">{{ action.label }}</div>
+              class="action-card"
+              :style="{'--bg': action.bgColor, '--color': action.iconColor}"
+              @click="$router.push(action.route)">
+              <el-icon :size="28" :color="action.iconColor"><component :is="action.icon" /></el-icon>
+              <div class="action-label">{{ action.label }}</div>
             </div>
           </div>
-        </el-card>
+        </div>
       </el-col>
     </el-row>
   </div>
@@ -99,6 +104,10 @@ import { ref, reactive, computed, onMounted, onBeforeUnmount, nextTick, markRaw 
 import * as echarts from 'echarts'
 import { Document, ChatDotRound, User, Share, SuccessFilled, Timer, UploadFilled, Position, Compass, Setting } from '@element-plus/icons-vue'
 import { getStats, getTrends, getStorage, getSystemStatus } from '../../api/dashboard'
+import { useAuthStore } from '../../stores/auth'
+
+const auth = useAuthStore()
+const username = computed(() => auth.user?.username || '管理员')
 
 const stats = ref([
   { label: '文档总数', value: 0, icon: markRaw(Document), bgColor: '#ecf5ff', iconColor: '#409eff' },
@@ -129,6 +138,8 @@ const serviceNames = {
   chromadb: 'ChromaDB',
 }
 
+const allHealthy = computed(() => Object.values(systemStatus).every(s => s === 'ok'))
+
 const storage = reactive({
   documents_mb: 0,
 })
@@ -137,7 +148,7 @@ const totalChunks = ref(0)
 const docTypeCounts = ref({})
 
 const storagePercent = computed(() => {
-  return Math.min(Math.round(storage.documents_mb / 10240 * 100), 100) // 假设总容量10GB
+  return Math.min(Math.round(storage.documents_mb / 10240 * 100), 100)
 })
 
 const quickActions = [
@@ -146,14 +157,6 @@ const quickActions = [
   { label: '查看图谱', icon: markRaw(Compass), route: '/graph', bgColor: '#fdf6ec', iconColor: '#e6a23c' },
   { label: '系统配置', icon: markRaw(Setting), route: '/config', bgColor: '#f4f4f5', iconColor: '#909399' },
 ]
-
-function getIconStyle(bgColor) {
-  return { width: '42px', height: '42px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: bgColor }
-}
-
-function getActionStyle(bgColor) {
-  return { flex: '1 1 calc(50% - 6px)', textAlign: 'center', padding: '12px 8px', borderRadius: '8px', cursor: 'pointer', transition: 'all 0.2s', background: bgColor }
-}
 
 async function loadStats() {
   try {
@@ -176,30 +179,38 @@ async function loadTrends() {
     const data = res.data || []
     if (!trendChart) return
     trendChart.setOption({
-      tooltip: { trigger: 'axis' },
-      grid: { left: 40, right: 20, top: 20, bottom: 30 },
+      tooltip: {
+        trigger: 'axis',
+        backgroundColor: 'rgba(255,255,255,0.95)',
+        borderColor: '#e8e8e8',
+        textStyle: { color: '#303133' },
+      },
+      grid: { left: 50, right: 20, top: 20, bottom: 30 },
       xAxis: {
         type: 'category',
         data: data.map(d => d.date),
         axisLabel: { fontSize: 11, color: '#909399' },
         axisLine: { lineStyle: { color: '#e8e8e8' } },
+        axisTick: { show: false },
       },
       yAxis: {
         type: 'value',
         minInterval: 1,
         axisLabel: { fontSize: 11, color: '#909399' },
-        splitLine: { lineStyle: { color: '#f0f0f0' } },
+        splitLine: { lineStyle: { color: '#f0f0f0', type: 'dashed' } },
+        axisLine: { show: false },
       },
       series: [{
         type: 'line',
         data: data.map(d => d.count),
         smooth: true,
         symbol: 'circle',
-        symbolSize: 6,
-        itemStyle: { color: '#409eff' },
+        symbolSize: 8,
+        itemStyle: { color: '#409eff', borderWidth: 2, borderColor: '#fff' },
+        lineStyle: { width: 3, color: '#409eff' },
         areaStyle: {
           color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-            { offset: 0, color: 'rgba(64,158,255,0.3)' },
+            { offset: 0, color: 'rgba(64,158,255,0.25)' },
             { offset: 1, color: 'rgba(64,158,255,0.02)' },
           ]),
         },
@@ -217,15 +228,31 @@ function renderDocTypeChart() {
     itemStyle: { color: typeColors[name] || '#909399' }
   }))
   docTypeChart.setOption({
-    tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
-    legend: { bottom: 0, textStyle: { fontSize: 11 } },
+    tooltip: {
+      trigger: 'item',
+      formatter: '{b}: {c} ({d}%)',
+      backgroundColor: 'rgba(255,255,255,0.95)',
+      borderColor: '#e8e8e8',
+      textStyle: { color: '#303133' },
+    },
+    legend: {
+      bottom: 0,
+      textStyle: { fontSize: 11, color: '#606266' },
+      itemWidth: 10,
+      itemHeight: 10,
+      itemGap: 12,
+    },
     series: [{
       type: 'pie',
-      radius: ['40%', '65%'],
+      radius: ['45%', '70%'],
       center: ['50%', '45%'],
       data,
       label: { show: false },
-      emphasis: { label: { show: true, fontSize: 14, fontWeight: 'bold' } },
+      emphasis: {
+        label: { show: true, fontSize: 14, fontWeight: 'bold' },
+        itemStyle: { shadowBlur: 10, shadowColor: 'rgba(0,0,0,0.1)' },
+      },
+      itemStyle: { borderRadius: 6, borderColor: '#fff', borderWidth: 2 },
     }],
   }, true)
 }
@@ -248,7 +275,6 @@ let resizeHandler = null
 
 onMounted(async () => {
   await nextTick()
-  // 先初始化图表
   if (trendChartRef.value) {
     trendChart = echarts.init(trendChartRef.value)
   }
@@ -260,7 +286,6 @@ onMounted(async () => {
     docTypeChart?.resize()
   }
   window.addEventListener('resize', resizeHandler)
-  // 再加载数据
   await loadStats()
   await loadTrends()
   await loadSystemStatus()
@@ -273,3 +298,117 @@ onBeforeUnmount(() => {
   docTypeChart?.dispose()
 })
 </script>
+
+<style scoped>
+.stat-card {
+  background: #fff;
+  border-radius: 10px;
+  padding: 18px 16px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+  border: 1px solid #f0f0f0;
+  transition: all 0.2s ease;
+  cursor: default;
+}
+.stat-card:hover {
+  box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+  transform: translateY(-2px);
+}
+.stat-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.stat-label {
+  font-size: 12px;
+  color: #909399;
+  line-height: 1;
+}
+.stat-value {
+  font-size: 24px;
+  font-weight: 700;
+  color: #303133;
+  margin-top: 4px;
+  line-height: 1;
+}
+
+.panel {
+  background: #fff;
+  border-radius: 10px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+  border: 1px solid #f0f0f0;
+  overflow: hidden;
+}
+.panel-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid #f0f0f0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.panel-title {
+  font-weight: 600;
+  font-size: 15px;
+  color: #303133;
+}
+
+.status-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 20px;
+  border-bottom: 1px solid #f5f5f5;
+  transition: background 0.15s;
+}
+.status-item:last-child {
+  border-bottom: none;
+}
+.status-item:hover {
+  background: #fafafa;
+}
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+  flex-shrink: 0;
+}
+.status-dot.healthy {
+  background: #67c23a;
+  box-shadow: 0 0 6px rgba(103,194,58,0.4);
+}
+.status-dot.unhealthy {
+  background: #f56c6c;
+  box-shadow: 0 0 6px rgba(245,108,108,0.4);
+}
+
+.action-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 20px 12px;
+  border-radius: 10px;
+  background: var(--bg);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: 1px solid transparent;
+}
+.action-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 6px 16px rgba(0,0,0,0.08);
+  border-color: var(--color);
+}
+.action-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: #303133;
+}
+</style>
