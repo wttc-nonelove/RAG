@@ -83,8 +83,21 @@ const editingUsername = ref(false)
 const newUsername = ref('')
 
 // 头像
-const avatarUrl = ref(localStorage.getItem('avatar_' + auth.user?.id) || '')
+const avatarUrl = ref('')
 const avatarInput = ref(null)
+
+// 初始化头像
+function initAvatar() {
+  if (auth.user?.id) {
+    const savedAvatar = localStorage.getItem('avatar_' + auth.user.id)
+    if (savedAvatar) {
+      avatarUrl.value = savedAvatar
+    }
+  }
+}
+
+// 初始化时加载头像
+initAvatar()
 
 onMounted(async () => {
   // 加载用户统计
@@ -122,11 +135,27 @@ function handleAvatarUpload(event) {
   const file = event.target.files[0]
   if (!file) return
   if (file.size > 2 * 1024 * 1024) return ElMessage.error('头像大小不能超过 2MB')
+
   const reader = new FileReader()
   reader.onload = (e) => {
-    avatarUrl.value = e.target.result
-    localStorage.setItem('avatar_' + auth.user?.id, e.target.result)
-    ElMessage.success('头像更新成功')
+    const avatarData = e.target.result
+    avatarUrl.value = avatarData
+
+    // 保存到 localStorage
+    try {
+      if (auth.user?.id) {
+        localStorage.setItem('avatar_' + auth.user.id, avatarData)
+        ElMessage.success('头像更新成功')
+      } else {
+        ElMessage.error('用户信息未加载，无法保存头像')
+      }
+    } catch (error) {
+      console.error('保存头像失败:', error)
+      ElMessage.error('头像保存失败，可能存储空间不足')
+    }
+  }
+  reader.onerror = () => {
+    ElMessage.error('读取头像文件失败')
   }
   reader.readAsDataURL(file)
   event.target.value = ''

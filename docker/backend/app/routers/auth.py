@@ -68,12 +68,39 @@ async def get_user_stats(user: User = Depends(get_current_user), db: AsyncSessio
     from sqlalchemy import select, func
     from app.models.message import Message
     from app.models.document import Document
-    # 问答次数
-    qa_count = (await db.execute(
-        select(func.count()).select_from(Message).where(Message.role == "user")
-    )).scalar()
-    # 文档数量
-    doc_count = (await db.execute(
-        select(func.count()).select_from(Document)
-    )).scalar()
+    from app.models.conversation import Conversation
+
+    if user.role == "admin":
+        # 管理员：显示所有用户的总共问答次数
+        qa_count = (await db.execute(
+            select(func.count()).select_from(Message).where(Message.role == "user")
+        )).scalar()
+        # 文档数量（所有文档）
+        doc_count = (await db.execute(
+            select(func.count()).select_from(Document)
+        )).scalar()
+    else:
+        # 普通用户：只显示当前用户的问答次数
+        # 先获取用户的会话ID列表
+        conv_ids = (await db.execute(
+            select(Conversation.id).where(Conversation.user_id == user.id)
+        )).scalars().all()
+
+        if conv_ids:
+            # 统计这些会话中的用户消息数量
+            qa_count = (await db.execute(
+                select(func.count()).select_from(Message).where(
+                    Message.conversation_id.in_(conv_ids),
+                    Message.role == "user"
+                )
+            )).scalar()
+        else:
+            qa_count = 0
+
+        # 文档数量（用户上传的文档，如果documents表有user_id字段）
+        # 如果没有user_id字段，则显示所有文档数量
+        doc_count = (await db.execute(
+            select(func.count()).select_from(Document)
+        )).scalar()
+
     return ok({"qa_count": qa_count, "doc_count": doc_count})

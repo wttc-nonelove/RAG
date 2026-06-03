@@ -13,6 +13,16 @@
           <div class="clay-panel-header"><span class="clay-panel-title">模型参数配置</span></div>
           <div style="padding:24px">
             <el-form label-width="140px">
+              <el-form-item label="Embedding 模式">
+                <el-radio-group v-model="config.embedding_mode">
+                  <el-radio value="local">本地 Embedding</el-radio>
+                  <el-radio value="remote">远程 Embedding</el-radio>
+                </el-radio-group>
+                <div style="margin-top:8px">
+                  <el-tag v-if="config.embedding_mode === 'local'" type="info" effect="plain" size="small">使用本地哈希算法生成向量，无需API密钥</el-tag>
+                  <el-tag v-else type="warning" effect="plain" size="small">使用远程API（如通义千问），需要配置模型供应商</el-tag>
+                </div>
+              </el-form-item>
               <el-form-item label="Temperature">
                 <el-slider v-model="config.temperature" :min="0" :max="2" :step="0.1" show-input style="width:300px" />
               </el-form-item>
@@ -155,6 +165,7 @@ const route = useRoute()
 const models = ref([])
 
 const config = reactive({
+  embedding_mode: 'local',
   temperature: 0.7, top_p: 0.9, max_tokens: 2048, top_k: 5, similarity_threshold: 0.6,
   chunk_size: 512, chunk_overlap: 128, kg_enabled: true, history_rounds: 5,
   kg_chunk_size: 3000, kg_overlap: 500, kg_min_chars: 200,
@@ -168,6 +179,7 @@ async function loadConfig() {
   try {
     const res = await client.get('/config')
     const data = res.data || {}
+    if (data.embedding_mode != null) config.embedding_mode = data.embedding_mode
     if (data.temperature != null) config.temperature = parseFloat(data.temperature)
     if (data.top_p != null) config.top_p = parseFloat(data.top_p)
     if (data.max_tokens != null) config.max_tokens = parseInt(data.max_tokens)
@@ -190,7 +202,7 @@ onMounted(loadConfig)
 watch(() => route.path, (newPath) => { if (newPath === '/config') loadConfig() })
 
 const saveMap = {
-  model: ['temperature', 'top_p', 'max_tokens'],
+  model: ['embedding_mode', 'temperature', 'top_p', 'max_tokens'],
   retrieval: ['top_k', 'similarity_threshold', 'history_rounds', 'kg_enabled'],
   chunk: ['chunk_size', 'chunk_overlap'],
   kg: ['kg_chunk_size', 'kg_overlap', 'kg_min_chars'],

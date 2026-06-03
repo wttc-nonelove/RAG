@@ -123,7 +123,20 @@ import {
 const router = useRouter()
 const auth = useAuthStore()
 const isCollapse = ref(false)
-const avatarUrl = ref(localStorage.getItem('avatar_' + auth.user?.id) || '')
+const avatarUrl = ref('')
+
+// 初始化头像
+function initAvatar() {
+  if (auth.user?.id) {
+    const savedAvatar = localStorage.getItem('avatar_' + auth.user.id)
+    if (savedAvatar) {
+      avatarUrl.value = savedAvatar
+    }
+  }
+}
+
+// 初始化时加载头像
+initAvatar()
 
 function toggleFullscreen() {
   const el = document.documentElement
