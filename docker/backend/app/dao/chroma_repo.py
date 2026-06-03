@@ -13,6 +13,17 @@ def get_collection(name: str = "kb_chunks"):
     return _collection
 
 
+def reset_collection(name: str = "kb_chunks"):
+    """重置集合（删除并重新创建）"""
+    global _collection
+    try:
+        _client.delete_collection(name)
+    except Exception:
+        pass
+    _collection = _client.get_or_create_collection(name=name, metadata={"hnsw:space": "cosine"})
+    return _collection
+
+
 def query(vector: list[float], top_k: int = 5) -> dict:
     col = get_collection()
     return col.query(query_embeddings=[vector], n_results=top_k, include=["documents", "metadatas", "distances"])
