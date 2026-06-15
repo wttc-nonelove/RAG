@@ -33,20 +33,33 @@
               <el-icon :size="20" color="#fff"><ChatDotRound /></el-icon>
             </div>
             <div class="bubble" :class="msg.role">
-              <div v-html="renderMarkdown(msg.content)"></div>
+              <div class="markdown-content" v-html="renderMarkdown(msg.content)"></div>
               <div v-if="msg.sources && msg.sources.length" class="sources-section">
                 <div class="sources-title">引用来源</div>
                 <div class="sources-tags">
                   <el-tag v-for="(s, i) in msg.sources" :key="i" size="small" effect="plain" round>
-                    {{ s.doc_name }} {{ s.page ? `p.${s.page}` : '' }}
+                    {{ s.doc_name }} {{ s.section_path ? ` / ${s.section_path}` : '' }} {{ s.page ? `p.${s.page}` : '' }}
                   </el-tag>
                 </div>
               </div>
-              <div v-if="msg.kg_references && (msg.kg_references.entities?.length || msg.kg_references.edges?.length)" class="kg-section">
-                <div class="kg-title">知识图谱引用</div>
-                <div v-if="msg.kg_references.entities?.length" class="kg-entities">
+              <div v-if="getReasoningPaths(msg).length" class="reasoning-section">
+                <div class="reasoning-title">关联路径</div>
+                <div v-for="(path, i) in getReasoningPaths(msg)" :key="i" class="reasoning-path">
+                  {{ path.path_text }}
+                </div>
+              </div>
+              <div v-if="getExpandedSources(msg).length" class="expanded-section">
+                <div class="expanded-title">扩展上下文</div>
+                <div v-for="(s, i) in getExpandedSources(msg)" :key="i" class="expanded-item">
+                  <span class="expanded-source">{{ s.doc_name }} {{ s.section_path ? ` / ${s.section_path}` : '' }}</span>
+                  <span class="expanded-excerpt">{{ s.excerpt }}</span>
+                </div>
+              </div>
+              <div v-if="getKgEdges(msg).length || getKgEntities(msg).length" class="kg-section">
+                <div class="kg-title">{{ getKgEvidenceTitle(msg) }}</div>
+                <div v-if="getKgEntities(msg).length" class="kg-entities">
                   <span class="kg-label">实体：</span>
-                  <el-popover v-for="entity in msg.kg_references.entities" :key="entity.name" trigger="hover" width="220" placement="top">
+                  <el-popover v-for="entity in getKgEntities(msg)" :key="entity.name" trigger="hover" width="220" placement="top">
                     <template #reference>
                       <el-tag size="small" :color="getTypeColor(entity.type)" style="margin:2px;cursor:pointer;color:#fff;border:none" round>{{ entity.name }}</el-tag>
                     </template>
@@ -57,12 +70,13 @@
                     </div>
                   </el-popover>
                 </div>
-                <div v-if="msg.kg_references.edges?.length" class="kg-edges">
+                <div v-if="getKgEdges(msg).length" class="kg-edges">
                   <span class="kg-label">关系：</span>
-                  <div v-for="(edge, i) in msg.kg_references.edges" :key="i" class="kg-edge-item">
-                    <el-tag size="small" :color="getEntityColor(msg.kg_references.entities, edge.source)" style="color:#fff;border:none;font-size:11px" round>{{ edge.source }}</el-tag>
+                  <div v-for="(edge, i) in getKgEdges(msg)" :key="i" class="kg-edge-item">
+                    <el-tag size="small" :color="getEntityColor(getKgEntities(msg), edge.source)" style="color:#fff;border:none;font-size:11px" round>{{ edge.source }}</el-tag>
                     <span style="color:#909399;font-size:11px">—[{{ edge.rel }}]→</span>
-                    <el-tag size="small" :color="getEntityColor(msg.kg_references.entities, edge.target)" style="color:#fff;border:none;font-size:11px" round>{{ edge.target }}</el-tag>
+                    <el-tag size="small" :color="getEntityColor(getKgEntities(msg), edge.target)" style="color:#fff;border:none;font-size:11px" round>{{ edge.target }}</el-tag>
+                    <span v-if="edge.evidence_type" class="kg-evidence-tag">{{ edge.evidence_type === 'path' ? '路径' : '支持' }}</span>
                   </div>
                 </div>
               </div>
@@ -127,6 +141,43 @@ function getEntityColor(entities, name) {
   if (!entities) return '#909399'
   const entity = entities.find(e => e.name === name)
   return entity ? getTypeColor(entity.type) : '#909399'
+}
+
+function getReasoningPaths(msg) {
+  return msg.kg_references?.reasoning_paths || msg.reasoning_paths || []
+}
+
+function getExpandedSources(msg) {
+  return msg.kg_references?.expanded_sources || msg.expanded_sources || []
+}
+
+function getKgEdges(msg) {
+  const edges = msg.kg_references?.edges || []
+  return edges
+    .filter(edge => edge?.source && edge?.rel && edge?.target)
+    .slice(0, 8)
+}
+
+function getKgEntities(msg) {
+  const names = new Set()
+  getKgEdges(msg).forEach(edge => {
+    names.add(edge.source)
+    names.add(edge.target)
+  })
+  if (!names.size) {
+    return (msg.kg_references?.entities || [])
+      .filter(entity => entity?.name)
+      .slice(0, 8)
+  }
+  return (msg.kg_references?.entities || [])
+    .filter(entity => entity?.name && names.has(entity.name))
+}
+
+function getKgEvidenceTitle(msg) {
+  if (msg.kg_references?.evidence_policy === 'entity_support') return '图谱实体证据'
+  return msg.kg_references?.evidence_policy === 'path_only'
+    ? '图谱路径证据'
+    : '图谱支持证据'
 }
 
 onMounted(async () => {
@@ -200,9 +251,112 @@ function renderMarkdown(text) { return md.render(text || '') }
   box-shadow: 0 3px 0 #f0f0f0;
 }
 
+.markdown-content {
+  max-width: 100%;
+  overflow-x: auto;
+  color: inherit;
+  word-break: break-word;
+}
+.markdown-content :deep(p) { margin: 0 0 10px; }
+.markdown-content :deep(p:last-child) { margin-bottom: 0; }
+.markdown-content :deep(h1),
+.markdown-content :deep(h2),
+.markdown-content :deep(h3),
+.markdown-content :deep(h4) {
+  margin: 14px 0 8px;
+  color: #1f2937;
+  font-weight: 700;
+  line-height: 1.35;
+}
+.markdown-content :deep(h1) { font-size: 20px; }
+.markdown-content :deep(h2) { font-size: 18px; }
+.markdown-content :deep(h3) { font-size: 16px; }
+.markdown-content :deep(h4) { font-size: 15px; }
+.markdown-content :deep(ul),
+.markdown-content :deep(ol) {
+  margin: 8px 0 10px;
+  padding-left: 22px;
+}
+.markdown-content :deep(li) { margin: 4px 0; }
+.markdown-content :deep(strong) { color: #111827; font-weight: 700; }
+.markdown-content :deep(blockquote) {
+  margin: 10px 0;
+  padding: 8px 12px;
+  border-left: 4px solid #7c9cff;
+  background: #f5f7ff;
+  color: #4b5563;
+  border-radius: 0 6px 6px 0;
+}
+.markdown-content :deep(code) {
+  padding: 2px 5px;
+  border-radius: 4px;
+  background: #eef2f7;
+  color: #b42318;
+  font-family: Consolas, Monaco, 'Courier New', monospace;
+  font-size: 13px;
+}
+.markdown-content :deep(pre) {
+  margin: 10px 0;
+  padding: 12px;
+  overflow-x: auto;
+  border: 1px solid #d9e2ec;
+  border-radius: 8px;
+  background: #0f172a;
+  color: #e5e7eb;
+}
+.markdown-content :deep(pre code) {
+  padding: 0;
+  background: transparent;
+  color: inherit;
+}
+.markdown-content :deep(table) {
+  width: 100%;
+  min-width: 520px;
+  margin: 12px 0;
+  border-collapse: collapse;
+  border: 1px solid #cfd8e3;
+  font-size: 13px;
+  line-height: 1.55;
+}
+.markdown-content :deep(th),
+.markdown-content :deep(td) {
+  border: 1px solid #cfd8e3;
+  padding: 8px 10px;
+  text-align: left;
+  vertical-align: top;
+}
+.markdown-content :deep(th) {
+  background: #f1f5fb;
+  color: #1f2937;
+  font-weight: 700;
+}
+.markdown-content :deep(tr:nth-child(even) td) { background: #fafcff; }
+.bubble.user .markdown-content :deep(h1),
+.bubble.user .markdown-content :deep(h2),
+.bubble.user .markdown-content :deep(h3),
+.bubble.user .markdown-content :deep(h4),
+.bubble.user .markdown-content :deep(strong) { color: #fff; }
+.bubble.user .markdown-content :deep(code) {
+  background: rgba(255,255,255,0.16);
+  color: #fff;
+}
+
 .sources-section { margin-top: 12px; padding-top: 12px; border-top: 1px solid #f0f0f0; }
 .sources-title { font-size: 12px; color: #909399; margin-bottom: 8px; font-weight: 500; }
 .sources-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+
+.reasoning-section { margin-top: 12px; padding-top: 12px; border-top: 1px solid #f0f0f0; }
+.reasoning-title { font-size: 12px; color: #606266; margin-bottom: 8px; font-weight: 600; }
+.reasoning-path {
+  font-size: 12px; color: #303133; background: #f8f9fb; border: 1px solid #e8e8e8;
+  border-radius: 6px; padding: 6px 8px; margin-bottom: 6px; line-height: 1.5;
+}
+
+.expanded-section { margin-top: 12px; padding-top: 12px; border-top: 1px solid #f0f0f0; }
+.expanded-title { font-size: 12px; color: #606266; margin-bottom: 8px; font-weight: 600; }
+.expanded-item { font-size: 12px; color: #606266; background: #fafafa; border-radius: 6px; padding: 6px 8px; margin-bottom: 6px; }
+.expanded-source { display: block; color: #409eff; margin-bottom: 4px; font-weight: 500; }
+.expanded-excerpt { display: block; line-height: 1.5; color: #606266; }
 
 .kg-section { margin-top: 12px; padding-top: 12px; border-top: 1px solid #f0f0f0; }
 .kg-title { font-size: 12px; color: #909399; margin-bottom: 8px; font-weight: 500; }
@@ -210,6 +364,15 @@ function renderMarkdown(text) { return md.render(text || '') }
 .kg-entities { margin-bottom: 8px; }
 .kg-edges { display: flex; flex-direction: column; gap: 4px; }
 .kg-edge-item { display: flex; align-items: center; gap: 4px; font-size: 12px; color: #606266; padding: 2px 0; }
+.kg-evidence-tag {
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: #eef4ff;
+  color: #4f6fb5;
+  border: 1px solid #d9e5ff;
+  font-size: 11px;
+  line-height: 1.5;
+}
 
 .input-area {
   padding: 16px 20px; border-top: 2px solid #f0f0f0; background: #fff;

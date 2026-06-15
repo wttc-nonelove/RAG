@@ -29,6 +29,13 @@ def query(vector: list[float], top_k: int = 5) -> dict:
     return col.query(query_embeddings=[vector], n_results=top_k, include=["documents", "metadatas", "distances"])
 
 
+def get_by_ids(ids: list[str]) -> dict:
+    if not ids:
+        return {"ids": [], "documents": [], "metadatas": []}
+    col = get_collection()
+    return col.get(ids=ids, include=["documents", "metadatas"])
+
+
 def add_batch(ids: list[str], embeddings: list[list[float]], documents: list[str], metadatas: list[dict]) -> None:
     col = get_collection()
     col.add(ids=ids, embeddings=embeddings, documents=documents, metadatas=metadatas)

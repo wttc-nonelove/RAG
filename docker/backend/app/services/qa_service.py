@@ -1,156 +1,30 @@
-"""
-智能问答服务模块
-功能：实现 RAG（检索增强生成）问答核心流程
-流程：问题向量化 → 向量检索 → 知识图谱补充 → LLM 生成回答
-"""
-
 import time
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
-from app.dao import chroma_repo, neo4j_repo
-from app.dao import conversation_dao, message_dao, model_dao
-from app.utils.embedding import embedding_client
-from app.utils.llm_client import llm_client
-from app.models.model_config import ModelConfig
+from app.dao import message_dao, model_dao
+from app.dao import token_usage_dao
 from app.models.system_config import SystemConfig
-from app.dao import config_dao
+from app.services.graphrag_service import retrieve_context
+from app.utils.llm_client import llm_client
 
 
 async def get_system_config(db: AsyncSession) -> dict:
-    """获取系统配置（检索参数、模型参数等）"""
     result = await db.execute(select(SystemConfig))
     rows = result.scalars().all()
     return {r.config_key: r.config_value for r in rows}
 
 
-async def rag_pipeline(db: AsyncSession, conversation_id: int, question: str, model_name: str, user_id: int) -> dict:
-    """
-    RAG 问答核心流程
+def _format_history(history) -> str:
+    lines = []
+    for item in history:
+        role = "用户" if item.role == "user" else "助手"
+        lines.append(f"{role}: {item.content[:200]}")
+    return "\n".join(lines)
 
-    参数:
-        db: 数据库会话
-        conversation_id: 会话ID
-        question: 用户问题
-        model_name: 使用的模型名称
-        user_id: 用户ID
 
-    返回:
-        dict: 包含 answer, sources, kg_references, model_used, tokens_used, response_time_ms 等
-    """
-    start_time = time.time()
-
-    # 第一步：获取系统配置
-    config = await get_system_config(db)
-    top_k = int(config.get("top_k", "5"))                    # 向量检索返回的最相似文档数量
-    threshold = float(config.get("similarity_threshold", "0.6"))  # 相似度阈值，低于此值不使用
-    history_rounds = int(config.get("history_rounds", "5"))   # 携带的历史对话轮数
-    kg_enabled = config.get("kg_enabled", "true") == "true"   # 是否启用知识图谱增强
-
-    # 第二步：保存用户消息到数据库
-    await message_dao.create(db, conversation_id, "user", question)
-    await db.commit()
-
-    # 第三步：获取对话历史（用于多轮对话上下文）
-    history = await message_dao.get_recent_history(db, conversation_id, history_rounds)
-
-    # 第四步：问题向量化 + 向量检索
-    embed_result = await embedding_client.encode_from_db(db, question)
-    question_embedding = embed_result["embeddings"][0]
-    results = chroma_repo.query(question_embedding, top_k)
-
-    # 第五步：筛选相似度达标的文档片段
-    sources = []
-    context_parts = []
-    max_similarity = 0.0
-
-    if results and results["documents"] and results["documents"][0]:
-        for i, (doc, meta, dist) in enumerate(zip(
-            results["documents"][0],
-            results["metadatas"][0],
-            results["distances"][0],
-        )):
-            similarity = 1.0 - dist  # ChromaDB 返回的是距离，转换为相似度
-            max_similarity = max(max_similarity, similarity)
-            if similarity >= threshold:
-                context_parts.append(doc)
-                sources.append({
-                    "doc_name": meta.get("filename", ""),
-                    "chunk_index": meta.get("chunk_index", 0),
-                    "excerpt": doc[:200],
-                    "similarity": round(similarity, 4),
-                })
-
-    # 第六步：相似度兜底判断
-    if max_similarity < threshold:
-        fallback_answer = "知识库中暂无相关信息，请尝试更换问题或补充相关文档。"
-        msg = await message_dao.create(db, conversation_id, "bot", fallback_answer, sources=[], kg_references=None, model_name=None)
-        await db.commit()
-        elapsed = int((time.time() - start_time) * 1000)
-        return {
-            "message_id": msg.id,
-            "answer": fallback_answer,
-            "sources": [],
-            "kg_references": None,
-            "model_used": None,
-            "tokens_used": 0,
-            "response_time_ms": elapsed,
-            "fallback": True,
-            "max_similarity": round(max_similarity, 4),
-        }
-
-    # 第七步：知识图谱补充（可选）
-    kg_context = ""
-    kg_references = None
-    if kg_enabled:
-        try:
-            import re
-            # 用正则提取中文词（2字以上），再用问题全文匹配实体
-            raw_terms = re.findall(r"[一-鿿]{2,}", question)
-            terms = list(set(raw_terms))
-            # 额外用问题全文作为查询词，让 CONTAINS 匹配实体名
-            if question not in terms:
-                terms.append(question)
-            if terms:
-                kg_data = neo4j_repo.query_subgraph(terms[:5])
-                if kg_data["edges"]:
-                    kg_lines = [f"{e['source']} --[{e['rel']}]--> {e['target']}" for e in kg_data["edges"][:5]]
-                    kg_context = "\n\n## 知识图谱补充\n" + "\n".join(kg_lines)
-                    kg_references = {
-                        "entities": kg_data["nodes"],
-                        "edges": kg_data["edges"],
-                    }
-        except Exception:
-            pass
-
-    # 第八步：组装上下文
-    context = "\n\n---\n\n".join(context_parts) if context_parts else "暂无相关参考资料"
-    if kg_context:
-        context += kg_context
-
-    # 第九步：格式化对话历史
-    history_text = ""
-    if history:
-        lines = []
-        for h in history:
-            role = "用户" if h.role == "user" else "助手"
-            lines.append(f"{role}: {h.content[:200]}")
-        history_text = "\n".join(lines)
-
-    # 第十步：获取模型配置和 System Prompt
-    model_config = None
-    for c in await model_dao.get_configs(db, "chat"):
-        if c.model_name == model_name:
-            model_config = c
-            break
-    if not model_config:
-        model_config = await model_dao.get_default_config(db, "chat")
-
-    base_instructions = (model_config.system_prompt if model_config and model_config.system_prompt else
-        "你是一个专业的企业知识库助手，请根据以下参考资料回答用户的问题。")
-
-    # 第十一步：组装完整的 Prompt
-    system_prompt = f"""{base_instructions}
+def _build_system_prompt(base_instructions: str, context: str, history_text: str) -> str:
+    return f"""{base_instructions}
 
 ## 参考资料
 {context}
@@ -159,42 +33,118 @@ async def rag_pipeline(db: AsyncSession, conversation_id: int, question: str, mo
 {history_text}
 
 ## 回答要求
-1. 基于参考资料进行回答，不要编造信息
-2. 如果参考资料中没有相关信息，请明确说明
-3. 回答结构清晰，使用 markdown 格式
-4. 在回答末尾注明引用来源"""
+1. 只基于参考资料、关系路径和对话历史回答，不要编造未给出的事实。
+2. 如果提供了多跳关联路径，先解释中间概念如何把两端概念连接起来，再给出结论。
+3. 如果多个来源都相关，需要综合不同文档和章节的证据，避免只引用单一片段。
+4. 如果参考资料不足，请明确说明缺少什么证据。
+5. 使用 Markdown 输出，并在回答末尾注明引用来源。"""
 
-    messages = [{"role": "system", "content": system_prompt}]
-    messages.append({"role": "user", "content": question})
 
-    # 第十二步：调用 LLM 生成回答
+async def rag_pipeline(db: AsyncSession, conversation_id: int, question: str, model_name: str, user_id: int) -> dict:
+    start_time = time.time()
+
+    config = await get_system_config(db)
+    threshold = float(config.get("similarity_threshold", "0.05"))
+    history_rounds = int(config.get("history_rounds", "5"))
+
+    await message_dao.create(db, conversation_id, "user", question)
+    await db.commit()
+
+    history = await message_dao.get_recent_history(db, conversation_id, history_rounds)
+
+    retrieval = await retrieve_context(db, question, config)
+    context_parts = retrieval["context_parts"]
+    sources = retrieval["sources"]
+    expanded_sources = retrieval["expanded_sources"]
+    kg_references = retrieval["kg_references"]
+    reasoning_paths = retrieval["reasoning_paths"]
+    max_similarity = retrieval["max_similarity"]
+
+    if max_similarity < threshold and not reasoning_paths:
+        fallback_answer = "知识库中暂无相关信息，请尝试更换问题或补充相关文档。"
+        msg = await message_dao.create(
+            db, conversation_id, "bot", fallback_answer,
+            sources=[], kg_references=None, model_name=None
+        )
+        await db.commit()
+        elapsed = int((time.time() - start_time) * 1000)
+        return {
+            "message_id": msg.id,
+            "answer": fallback_answer,
+            "sources": [],
+            "expanded_sources": [],
+            "kg_references": None,
+            "reasoning_paths": [],
+            "model_used": None,
+            "tokens_used": 0,
+            "response_time_ms": elapsed,
+            "fallback": True,
+            "max_similarity": round(max_similarity, 4),
+        }
+
+    history_text = _format_history(history)
+    context = "\n\n---\n\n".join(context_parts) if context_parts else "暂无相关参考资料"
+
+    model_config = None
+    for item in await model_dao.get_configs(db, "chat"):
+        if item.model_name == model_name:
+            model_config = item
+            break
+    if not model_config:
+        model_config = await model_dao.get_default_config(db, "chat")
+    if model_config:
+        model_name = model_config.model_name
+
+    base_instructions = (
+        model_config.system_prompt
+        if model_config and model_config.system_prompt
+        else "你是一个专业的企业知识库助手，请根据参考资料和知识图谱证据回答用户的问题。"
+    )
+    system_prompt = _build_system_prompt(base_instructions, context, history_text)
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": question},
+    ]
+
     temperature = float(config.get("temperature", "0.7"))
     top_p = float(config.get("top_p", "0.9"))
     max_tokens = int(config.get("max_tokens", "2048"))
-
     llm_result = await llm_client.chat_from_db(db, model_name, messages, temperature, top_p, max_tokens)
     answer = llm_result["content"]
     tokens_used = llm_result["tokens_used"]
 
-    # 第十三步：记录 token 消耗到独立表（用于用量统计）
-    from app.dao import token_usage_dao
     await token_usage_dao.create(
-        db, model_name=model_name, model_type="chat",
-        tokens_used=tokens_used, source_type="qa",
-        source_id=conversation_id, source_name=question[:100]
+        db,
+        model_name=model_name,
+        model_type="chat",
+        tokens_used=tokens_used,
+        source_type="qa",
+        source_id=conversation_id,
+        source_name=question[:100],
     )
 
-    # 第十四步：保存机器人回答到数据库
-    msg = await message_dao.create(db, conversation_id, "bot", answer, sources=sources, kg_references=kg_references, model_name=model_name, tokens_used=tokens_used)
+    kg_references = kg_references or {}
+    kg_references["expanded_sources"] = expanded_sources
+    msg = await message_dao.create(
+        db,
+        conversation_id,
+        "bot",
+        answer,
+        sources=sources,
+        kg_references=kg_references,
+        model_name=model_name,
+        tokens_used=tokens_used,
+    )
     await db.commit()
 
-    # 第十五步：返回结果
     elapsed = int((time.time() - start_time) * 1000)
     return {
         "message_id": msg.id,
         "answer": answer,
         "sources": sources,
+        "expanded_sources": expanded_sources,
         "kg_references": kg_references,
+        "reasoning_paths": reasoning_paths,
         "model_used": model_name,
         "tokens_used": tokens_used,
         "response_time_ms": elapsed,

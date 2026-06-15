@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.dao import document_dao, file_store, chroma_repo
 from app.models.document import Document
-from app.utils.text_processor import clean_text, chunk_text
+from app.utils.text_processor import clean_text, chunk_text, chunk_text_with_metadata
 from app.utils.embedding import embedding_client
 from app.utils.kg_extractor import extract as kg_extract
 from app.dao import neo4j_repo
@@ -115,15 +115,42 @@ async def parse_document(doc_id: int) -> None:
             # 第二步：清洗文本
             text = clean_text(text)
             # 第三步：分块
-            chunks = chunk_text(text)
+            from app.dao import config_dao
+            config = await config_dao.get_all(db)
+            config_dict = {c.config_key: c.config_value for c in config}
+            chunk_size = int(config_dict.get("chunk_size", "1024"))
+            chunk_overlap = int(config_dict.get("chunk_overlap", "128"))
+            chunk_items = chunk_text_with_metadata(text, chunk_size=chunk_size, chunk_overlap=chunk_overlap)
+            chunks = [item["text"] for item in chunk_items]
 
             # 第四步：向量化并入库 ChromaDB
             embed_result = await embedding_client.encode_batch_from_db(db, chunks)
             embeddings = embed_result["embeddings"]
             embedding_tokens = embed_result["tokens_used"]
             ids = [f"doc{doc_id}_chunk{i}" for i in range(len(chunks))]
-            metadatas = [{"doc_id": doc_id, "filename": doc.filename, "chunk_index": i} for i in range(len(chunks))]
+            metadatas = []
+            graph_chunks = []
+            for i, item in enumerate(chunk_items):
+                chunk_id = ids[i]
+                metadata = {
+                    "doc_id": doc_id,
+                    "filename": doc.filename,
+                    "chunk_index": i,
+                    "section_path": item.get("section_path") or "正文",
+                    "prev_chunk_id": ids[i - 1] if i > 0 else "",
+                    "next_chunk_id": ids[i + 1] if i + 1 < len(ids) else "",
+                    "start_char": item.get("start_char", 0),
+                    "end_char": item.get("end_char", 0),
+                }
+                metadatas.append(metadata)
+                graph_chunks.append({"chunk_id": chunk_id, "text": chunks[i], **metadata})
             chroma_repo.add_batch(ids=ids, embeddings=embeddings, documents=chunks, metadatas=metadatas)
+            try:
+                neo4j_repo.delete_document_structure(doc_id)
+                neo4j_repo.create_document_structure(doc_id, doc.filename, graph_chunks)
+            except Exception as e:
+                import loguru
+                loguru.logger.warning(f"Document structure graph failed: {e}")
 
             # 记录 embedding token 消耗到独立表
             if embedding_tokens > 0:
@@ -145,9 +172,6 @@ async def parse_document(doc_id: int) -> None:
             # 第五步：知识图谱抽取
             try:
                 # 从数据库读取提取参数配置
-                from app.dao import config_dao
-                config = await config_dao.get_all(db)
-                config_dict = {c.config_key: c.config_value for c in config}
                 kg_chunk_size = int(config_dict.get("kg_chunk_size", "3000"))
                 kg_overlap = int(config_dict.get("kg_overlap", "500"))
                 kg_min_chars = int(config_dict.get("kg_min_chars", "200"))
@@ -179,6 +203,11 @@ async def parse_document(doc_id: int) -> None:
                     if key not in seen_relations:
                         seen_relations.add(key)
                         neo4j_repo.create_relation(rel["source"], rel["relation"], rel["target"])
+                try:
+                    neo4j_repo.link_chunk_mentions(doc_id, graph_chunks, all_entities)
+                except Exception as e:
+                    import loguru
+                    loguru.logger.warning(f"Chunk mention graph failed: {e}")
             except Exception as e:
                 import loguru
                 loguru.logger.error(f"KG storage failed: {e}")
@@ -316,6 +345,7 @@ async def delete_document(db: AsyncSession, doc_id: int) -> None:
         loguru.logger.warning(f"ChromaDB delete failed for doc {doc_id}: {e}")
     # 清理 Neo4j 图谱
     try:
+        neo4j_repo.delete_document_structure(doc_id)
         neo4j_repo.delete_by_doc_id(doc_id)
     except Exception as e:
         import loguru
