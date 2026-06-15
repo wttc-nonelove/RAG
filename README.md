@@ -96,10 +96,10 @@ docker-compose up -d
 
 | 服务 | 地址 |
 |------|------|
-| 前端界面 | http://localhost:5173 |
-| 后端 API | http://localhost:8000 |
-| API 文档 | http://localhost:8000/docs |
-| Neo4j 控制台 | http://localhost:7474 |
+| 前端界面 | http://localhost:15173 |
+| 后端 API | http://localhost:18080 |
+| API 文档 | http://localhost:18080/docs |
+| Neo4j 控制台 | http://localhost:17474 |
 
 5. **默认登录**
 
@@ -146,12 +146,12 @@ RAG2.0/
 
 | 服务 | 容器端口 | 宿主机端口 | 用途 |
 |------|----------|------------|------|
-| rag-frontend | 5173 | 5173 | 前端 Web 界面 |
-| rag-backend | 8000 | 8000 | 后端 API 服务 |
-| rag-mysql | 3306 | 3307 | MySQL 数据库 |
-| rag-redis | 6379 | 6379 | Redis 缓存 |
-| rag-neo4j | 7474/7687 | 7474/7687 | Neo4j 图数据库 |
-| rag-chromadb | 8000 | 8001 | ChromaDB 向量库 |
+| rag-frontend | 5173 | 15173 | 前端 Web 界面 |
+| rag-backend | 8000 | 18080 | 后端 API 服务 |
+| rag-mysql | 3306 | 13307 | MySQL 数据库 |
+| rag-redis | 6379 | 16379 | Redis 缓存 |
+| rag-neo4j | 7474/7687 | 17474/17687 | Neo4j 图数据库 |
+| rag-chromadb | 8000 | 18001 | ChromaDB 向量库 |
 
 ## 使用指南
 
@@ -251,8 +251,8 @@ npm run dev
 ### API 文档
 
 启动后端服务后访问：
-- Swagger UI：http://localhost:8000/docs
-- ReDoc：http://localhost:8000/redoc
+- Swagger UI：http://localhost:18080/docs
+- ReDoc：http://localhost:18080/redoc
 
 ## 许可证
 
